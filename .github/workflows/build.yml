@@ -1,0 +1,88 @@
+name: Build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+        os: [ubuntu-18.04, ubuntu-20.04, macos-latest]
+        exclude:
+           - os: macos-latest
+             compiler: gcc
+    env:
+      CC: ${{ matrix.compiler }}
+      MACOSX_DEPLOYMENT_TARGET: "10.10"
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: install packages
+      if: ${{ runner.os == 'Linux' }}
+      run: |
+        sudo apt-get update && sudo apt-get install -y libavcodec-dev \
+                            libavdevice-dev \
+                            libavformat-dev \
+                            libgtk-3-dev \
+                            libjack-jackd2-dev \
+                            libmosquitto-dev \
+                            libmpg123-dev \
+                            libopus-dev \
+                            libpulse-dev \
+                            libsndfile1-dev \
+                            libspandsp-dev \
+                            libssl-dev \
+                            libglib2.0-dev \
+                            libopencore-amrnb-dev \
+                            libopencore-amrwb-dev \
+                            libgstreamer1.0-dev \
+                            libvpx-dev
+
+    - name: install aac
+      if: ${{ matrix.os == 'ubuntu-20.04' }}
+      run: |
+        sudo apt-get update && sudo apt-get install -y libfdk-aac-dev
+
+    - name: install packages
+      if: ${{ runner.os == 'macOS' }}
+      run: |
+        brew install codec2 \
+                        fdk-aac \
+                        ffmpeg \
+                        jack \
+                        mpg123 \
+                        spandsp
+
+    - uses: sreimers/pr-dependency-action@v0.3
+      with:
+        name: re
+        repo: https://github.com/baresip/re
+        secret: ${{ secrets.GITHUB_TOKEN }}
+
+    - uses: sreimers/pr-dependency-action@v0.3
+      with:
+        name: rem
+        repo: https://github.com/baresip/rem
+        secret: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: make re/rem/baresip
+      run: |
+        for p in re rem baresip; do cd $p && sudo PATH="$PATH" make install && cd - && sudo rm -Rf $p; done
+
+    - name: ldconfig
+      if: ${{ runner.os == 'Linux' }}
+      run: sudo ldconfig
+
+    - name: make baresip-apps linux
+      if: ${{ runner.os == 'Linux' }}
+      run: |
+        make V=1 CCACHE= EXTRA_CFLAGS=-Werror appsinfo
+        make clean; make CCACHE=
+
+    - name: make baresip-apps macOS
+      if: ${{ runner.os == 'macOS' }}
+      run: |
+        make V=1 CCACHE= EXTRA_CFLAGS=-Werror appsinfo
+        make clean; make CCACHE=
