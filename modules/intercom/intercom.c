@@ -31,6 +31,7 @@
 struct intercom {
 	int32_t adelay;
 	enum answer_method met;
+	bool privacy;
 };
 
 
@@ -52,6 +53,23 @@ static int cmd_set_adelay(struct re_printf *pf, void *arg)
 
 	(void)re_hprintf(pf, "Intercom answer delay changed to %ds\n",
 			 st.adelay);
+	return 0;
+}
+
+
+static int cmd_en_privacy(struct re_printf *pf, void *arg)
+{
+	const struct cmd_arg *carg = arg;
+	const char *usage = "usage: /icprivacy <on,off>\n";
+
+	if (!str_isset(carg->prm)) {
+		re_hprintf(pf, usage);
+		return EINVAL;
+	}
+
+	st.privacy = !strcmp(carg->prm, "on");
+	(void)re_hprintf(pf, "Intercom privacy mode switched: %s\n",
+			 st.privacy ? "on" : "off");
 	return 0;
 }
 
@@ -181,8 +199,38 @@ static int cmd_surveil(struct re_printf *pf, void *arg)
 }
 
 
-static int intercom_handler(const struct pl *name, const struct pl *val,
-	void *arg)
+static bool is_intercom(const struct pl *name)
+{
+	return 0 == pl_strcmp(name, "Intercom");
+}
+
+
+static bool is_normal(const struct pl *val)
+{
+	return !pl_strcmp(val, "normal");
+}
+
+
+static bool is_announcement(const struct pl *val)
+{
+	return !pl_strcmp(val, "announcement");
+}
+
+
+static bool is_forcetalk(const struct pl *val)
+{
+	return !pl_strcmp(val, "forcetalk");
+}
+
+
+static bool is_surveillance(const struct pl *val)
+{
+	return !pl_strcmp(val, "surveillance");
+}
+
+
+static int incoming_handler(const struct pl *name,
+		const struct pl *val, void *arg)
 {
 	struct call    *call = arg;
 	struct ua *ua  = call_get_ua(call);
@@ -192,9 +240,8 @@ static int intercom_handler(const struct pl *name, const struct pl *val,
 	if (!name || !val)
 		return 0;
 
-	if (pl_strcmp(name, "Intercom"))
+	if (!is_intercom(name))
 		return 0;
-
 
 	ardir =sdp_media_rdir(
 			stream_sdpmedia(audio_strm(call_audio(call))));
@@ -206,7 +253,87 @@ static int intercom_handler(const struct pl *name, const struct pl *val,
 	     account_aor(acc), call_id(call), name, val,
 	     sdp_dir_name(ardir), sdp_dir_name(vrdir));
 
+	if (st.privacy && is_normal(val)) {
+		info("intercom: auto answer suppressed - privacy mode on\n");
+		call_set_answer_delay(call, -1);
+		module_event("intercom", "override-aufile", ua, call,
+				"ring_aufile:icnormal_aufile");
+		return 0;
+	}
+
 	module_event("intercom", "incoming", ua, call, "%r", val);
+
+	if (is_announcement(val)) {
+		module_event("intercom", "override-aufile", ua, call,
+				"sip_autoanswer_aufile:icannounce_aufile");
+		return 0;
+	}
+
+	if (is_forcetalk(val)) {
+		module_event("intercom", "override-aufile", ua, call,
+				"sip_autoanswer_aufile:icforce_aufile");
+		return 0;
+	}
+
+	if (is_surveillance(val)) {
+		module_event("intercom", "override-aufile", ua, call,
+				"sip_autoanswer_aufile:none");
+		return 0;
+	}
+
+	return 0;
+}
+
+
+static int outgoing_handler(const struct pl *name,
+		const struct pl *val, void *arg)
+{
+	struct call    *call = arg;
+	struct ua *ua  = call_get_ua(call);
+
+	if (!name || !val)
+		return 0;
+
+	if (!is_intercom(name))
+		return 0;
+
+	module_event("intercom", "outgoing", ua, call, "%r", val);
+
+	return 0;
+}
+
+
+static int established_handler(const struct pl *name,
+		const struct pl *val, void *arg)
+{
+	struct call    *call = arg;
+	struct ua *ua  = call_get_ua(call);
+	enum sdp_dir aldir, vldir;
+	bool outgoing = call_is_outgoing(call);
+
+	if (!name || !val)
+		return 0;
+
+	if (!is_intercom(name))
+		return 0;
+
+	aldir =sdp_media_ldir(
+			stream_sdpmedia(audio_strm(call_audio(call))));
+	vldir = sdp_media_ldir(
+			stream_sdpmedia(video_strm(call_video(call))));
+
+	if (outgoing && is_forcetalk(val)) {
+
+		/* this allows incoming re-INVITE with SDP dir SDP_SENDRECV */
+		call_set_media_direction(call,
+				aldir ? SDP_SENDRECV : SDP_INACTIVE,
+				vldir ? SDP_SENDRECV : SDP_INACTIVE);
+		return 0;
+	}
+
+	module_event("intercom", outgoing ?
+			"outgoing-established" : "incoming-established",
+			ua, call, "%r", val);
 	return 0;
 }
 
@@ -224,8 +351,24 @@ static void ua_event_handler(struct ua *ua, enum ua_event ev,
 	case UA_EVENT_CALL_INCOMING:
 
 		hdrs = call_get_custom_hdrs(call);
-		(void)custom_hdrs_apply(hdrs, intercom_handler, call);
+		(void)custom_hdrs_apply(hdrs, incoming_handler, call);
+		break;
 
+	case UA_EVENT_CALL_LOCAL_SDP:
+		if (call_state(call) != CALL_STATE_OUTGOING)
+			break;
+
+		hdrs = call_get_custom_hdrs(call);
+		(void)custom_hdrs_apply(hdrs, outgoing_handler, call);
+		break;
+
+	case UA_EVENT_CALL_ESTABLISHED:
+
+		if (!call_is_outgoing(call))
+			break;
+
+		hdrs = call_get_custom_hdrs(call);
+		(void)custom_hdrs_apply(hdrs, established_handler, call);
 		break;
 
 	default:
@@ -258,6 +401,8 @@ static const struct cmd cmdv[] = {
 {"icannounce",  0, CMD_PRM, "Intercom announcement",           cmd_announce},
 {"icforce",     0, CMD_PRM, "Intercom force during privacy",   cmd_force},
 {"icsurveil",   0, CMD_PRM, "Intercom surveil peer",           cmd_surveil},
+{"icprivacy",   0, CMD_PRM, "Intercom set privacy mode on/off",
+							       cmd_en_privacy},
 
 };
 
