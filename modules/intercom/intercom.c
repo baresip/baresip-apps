@@ -181,6 +181,75 @@ static int cmd_surveil(struct re_printf *pf, void *arg)
 }
 
 
+static int intercom_handler(const struct pl *name, const struct pl *val,
+	void *arg)
+{
+	struct call    *call = arg;
+	struct ua *ua  = call_get_ua(call);
+	struct account *acc  = ua_account(ua);
+	enum sdp_dir ardir, vrdir;
+
+	if (!name || !val)
+		return 0;
+
+	if (pl_strcmp(name, "Intercom"))
+		return 0;
+
+
+	ardir =sdp_media_rdir(
+			stream_sdpmedia(audio_strm(call_audio(call))));
+	vrdir = sdp_media_rdir(
+			stream_sdpmedia(video_strm(call_video(call))));
+
+	info("intercom: [ ua=%s call=%s ] %r: %r - "
+	     "audio-video: %s-%s\n",
+	     account_aor(acc), call_id(call), name, val,
+	     sdp_dir_name(ardir), sdp_dir_name(vrdir));
+
+	module_event("intercom", "incoming", ua, call, "%r", val);
+	return 0;
+}
+
+
+static void ua_event_handler(struct ua *ua, enum ua_event ev,
+			     struct call *call, const char *prm, void *arg)
+{
+	const struct list *hdrs;
+	(void)prm;
+	(void)arg;
+	(void)ua;
+
+	switch (ev) {
+
+	case UA_EVENT_CALL_INCOMING:
+
+		hdrs = call_get_custom_hdrs(call);
+		(void)custom_hdrs_apply(hdrs, intercom_handler, call);
+
+		break;
+
+	default:
+		break;
+	}
+}
+
+
+static int uag_add_xhdr_intercom(void)
+{
+	struct le *le;
+	int err;
+
+	for (le = list_head(uag_list()); le; le = le->next) {
+		struct ua *ua = le->data;
+		err = ua_add_xhdr_filter(ua, "Intercom");
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
+
 static const struct cmd cmdv[] = {
 
 {"icsetadelay", 0, CMD_PRM, "Set intercom answer delay in [s] (default: 0)",
@@ -208,6 +277,9 @@ static int module_init(void)
 	else if (!pl_strcmp(&met, "alert-info"))
 		st.met = ANSM_ALERTINFO;
 
+	err |= uag_event_register(ua_event_handler, NULL);
+	err |= uag_add_xhdr_intercom();
+
 	info("intercom: init\n");
 	return err;
 }
@@ -217,6 +289,7 @@ static int module_close(void)
 {
 
 	cmd_unregister(baresip_commands(), cmdv);
+	uag_event_unregister(ua_event_handler);
 
 	return 0;
 }
