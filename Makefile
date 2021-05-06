@@ -62,13 +62,6 @@ modules:	$(MOD_BINS)
 
 include $(MOD_MK)
 
-$(BUILD)/modules/$(MOD)/%.o: modules/$(MOD)/%.c $(BUILD) Makefile \
-				modules/$(MOD)/module.mk mk/modules.mk
-	@echo "  CC [M]  $@"
-	@mkdir -p $(dir $@)
-	$(HIDE)$(CC) $(CFLAGS) $($(call modulename,$@)_CFLAGS) \
-		-c $< -o $@ $(DFLAGS)
-
 $(BUILD): Makefile
 	@mkdir -p $(BUILD)
 	@touch $@
