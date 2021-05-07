@@ -20,6 +20,15 @@
  * event handler of module menu. Thus be sure to load this module before module
  * menu!
  *
+ * Notification/Ring tones are played by module menu which is informed by
+ * module events which tone to play.
+ *
+ * Configuration:
+ * icnormal_aufile              normal.wav
+ * icring_aufile                intercom-ring.wav,-1,500
+ * icannounce_aufile            announce.wav
+ * icforce_aufile               force.wav
+ *
  */
 
 
