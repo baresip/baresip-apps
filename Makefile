@@ -43,8 +43,8 @@ BARESIP_MOD_MK := $(shell [ -f $(BARESIP_PATH)/mk/mod.mk ] && \
 	echo "$(BARESIP_PATH)/mk/mod.mk")
 endif
 
-CFLAGS    += -I$(LIBRE_INC) -I$(BARESIP_PATH)
-CXXFLAGS  += -I$(LIBRE_INC) -I$(BARESIP_PATH)
+CFLAGS    += -I$(LIBRE_INC) -I$(BARESIP_PATH)/include
+CXXFLAGS  += -I$(LIBRE_INC) -I$(BARESIP_PATH)/include
 CPPFLAGS += -DHAVE_INTTYPES_H
 
 
