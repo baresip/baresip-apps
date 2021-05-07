@@ -5,6 +5,6 @@
 #
 
 MOD		:= intercom
-$(MOD)_SRCS	+= intercom.c
+$(MOD)_SRCS	+= intercom.c incoming.c
 
 include mk/mod.mk
