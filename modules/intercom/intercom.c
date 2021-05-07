@@ -28,6 +28,10 @@
  * icring_aufile                intercom-ring.wav,-1,500
  * icannounce_aufile            announce.wav
  * icforce_aufile               force.wav
+ * icprivacy                    no
+ * icallow_announce             yes
+ * icallow_force                no
+ * icallow_surveil              no
  *
  */
 

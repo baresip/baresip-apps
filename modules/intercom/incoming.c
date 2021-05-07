@@ -11,7 +11,14 @@
 
 #include "intercom.h"
 
+static int reject_call(struct call *call, uint16_t scode, const char *reason)
+{
+	struct ua *ua = call_get_ua(call);
+	call_hangup(call, scode, reason);
 
+	ua_event(ua, UA_EVENT_CALL_CLOSED, call, reason);
+	return mem_deref_later(call);
+}
 
 
 static bool is_intercom(const struct pl *name)
@@ -51,6 +58,10 @@ static int incoming_handler(const struct pl *name,
 	struct ua *ua  = call_get_ua(call);
 	struct account *acc  = ua_account(ua);
 	enum sdp_dir ardir, vrdir;
+	bool privacy        = false;
+	bool allow_announce = true;
+	bool allow_force    = false;
+	bool allow_surveil  = false;
 
 	if (!name || !val)
 		return 0;
@@ -68,7 +79,12 @@ static int incoming_handler(const struct pl *name,
 	     account_aor(acc), call_id(call), name, val,
 	     sdp_dir_name(ardir), sdp_dir_name(vrdir));
 
-	if (ic_privacy() && is_normal(val)) {
+	(void)conf_get_bool(conf_cur(), "icprivacy", &privacy);
+	(void)conf_get_bool(conf_cur(), "icallow_announce", &allow_announce);
+	(void)conf_get_bool(conf_cur(), "icallow_force", &allow_force);
+	(void)conf_get_bool(conf_cur(), "icallow_surveil", &allow_surveil);
+
+	if (privacy && is_normal(val)) {
 		info("intercom: auto answer suppressed - privacy mode on\n");
 		call_set_answer_delay(call, -1);
 		module_event("intercom", "override-aufile", ua, call,
@@ -85,18 +101,33 @@ static int incoming_handler(const struct pl *name,
 	}
 
 	if (is_announcement(val)) {
+		if (!allow_announce) {
+			reject_call(call, 406, "Not Acceptable");
+			return 0;
+		}
+
 		module_event("intercom", "override-aufile", ua, call,
 				"sip_autoanswer_aufile:icannounce_aufile");
 		return 0;
 	}
 
 	if (is_forcetalk(val)) {
+		if (!allow_force) {
+			reject_call(call, 406, "Not Acceptable");
+			return 0;
+		}
+
 		module_event("intercom", "override-aufile", ua, call,
 				"sip_autoanswer_aufile:icforce_aufile");
 		return 0;
 	}
 
 	if (is_surveillance(val)) {
+		if (!allow_force) {
+			reject_call(call, 406, "Not Acceptable");
+			return 0;
+		}
+
 		module_event("intercom", "override-aufile", ua, call,
 				"sip_autoanswer_aufile:none");
 		return 0;
@@ -166,6 +197,9 @@ void ua_event_handler(struct ua *ua, enum ua_event ev,
 	(void)prm;
 	(void)arg;
 	(void)ua;
+
+	if (call_state(call)==CALL_STATE_TERMINATED)
+		return;
 
 	switch (ev) {
 
