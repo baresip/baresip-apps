@@ -5,12 +5,10 @@
  */
 
 struct intercom {
-	int32_t adelay;
-	enum answer_method met;
-	bool privacy;
+	int32_t adelay;           /**< Answer delay for outgoing calls     */
+	enum answer_method met;   /**< SIP auto answer method              */
 };
 
 
 void ua_event_handler(struct ua *ua, enum ua_event ev,
 			     struct call *call, const char *prm, void *arg);
-bool ic_privacy(void);

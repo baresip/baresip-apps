@@ -41,10 +41,6 @@
 static struct intercom st;
 
 
-bool ic_privacy(void)
-{
-	return st.privacy;
-}
 
 
 static int cmd_set_adelay(struct re_printf *pf, void *arg)
@@ -62,23 +58,6 @@ static int cmd_set_adelay(struct re_printf *pf, void *arg)
 
 	(void)re_hprintf(pf, "Intercom answer delay changed to %ds\n",
 			 st.adelay);
-	return 0;
-}
-
-
-static int cmd_en_privacy(struct re_printf *pf, void *arg)
-{
-	const struct cmd_arg *carg = arg;
-	const char *usage = "usage: /icprivacy <on,off>\n";
-
-	if (!str_isset(carg->prm)) {
-		re_hprintf(pf, usage);
-		return EINVAL;
-	}
-
-	st.privacy = !strcmp(carg->prm, "on");
-	(void)re_hprintf(pf, "Intercom privacy mode switched: %s\n",
-			 st.privacy ? "on" : "off");
 	return 0;
 }
 
@@ -232,8 +211,6 @@ static const struct cmd cmdv[] = {
 {"icannounce",  0, CMD_PRM, "Intercom announcement",           cmd_announce},
 {"icforce",     0, CMD_PRM, "Intercom force during privacy",   cmd_force},
 {"icsurveil",   0, CMD_PRM, "Intercom surveil peer",           cmd_surveil},
-{"icprivacy",   0, CMD_PRM, "Intercom set privacy mode on/off",
-							       cmd_en_privacy},
 
 };
 
