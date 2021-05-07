@@ -73,7 +73,7 @@ jobs:
         repo: https://github.com/baresip/baresip
         secret: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: make re/rem/baresip
+    - name: make re/rem
       run: |
         for p in re rem; do cd $p && sudo PATH="$PATH" make install && cd - && sudo rm -Rf $p; done
 
