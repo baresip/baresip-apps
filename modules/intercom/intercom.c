@@ -40,7 +40,37 @@
 
 static struct intercom st;
 
+struct mem_le {
+	struct le le;
+	void *data;
+};
 
+
+static void mem_le_destructor(void *arg)
+{
+	struct mem_le *mle = arg;
+
+	list_unlink(&mle->le);
+	mem_deref(mle->data);
+}
+
+
+static void do_deref(void *arg)
+{
+	list_flush(arg);
+}
+
+
+int mem_deref_later(void *arg)
+{
+	struct mem_le *mle = mem_zalloc(sizeof(*mle), mem_le_destructor);
+	mle->data = arg;
+
+	list_append(&st.deref, &mle->le, mle);
+
+	tmr_start(&st.tmr, 0, do_deref, &st.deref);
+	return 0;
+}
 
 
 static int cmd_set_adelay(struct re_printf *pf, void *arg)
