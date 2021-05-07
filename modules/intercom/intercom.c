@@ -257,11 +257,17 @@ static int incoming_handler(const struct pl *name,
 		info("intercom: auto answer suppressed - privacy mode on\n");
 		call_set_answer_delay(call, -1);
 		module_event("intercom", "override-aufile", ua, call,
-				"ring_aufile:icnormal_aufile");
+				"ring_aufile:icring_aufile");
 		return 0;
 	}
 
 	module_event("intercom", "incoming", ua, call, "%r", val);
+
+	if (is_normal(val)) {
+		module_event("intercom", "override-aufile", ua, call,
+				"sip_autoanswer_aufile:icnormal_aufile");
+		return 0;
+	}
 
 	if (is_announcement(val)) {
 		module_event("intercom", "override-aufile", ua, call,
