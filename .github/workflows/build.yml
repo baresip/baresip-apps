@@ -75,7 +75,11 @@ jobs:
 
     - name: make re/rem/baresip
       run: |
-        for p in re rem baresip; do cd $p && sudo PATH="$PATH" make install && cd - && sudo rm -Rf $p; done
+        for p in re rem; do cd $p && sudo PATH="$PATH" make install && cd - && sudo rm -Rf $p; done
+
+    - name: make baresip
+      run: |
+        cd baresip && sudo PATH="$PATH" make install && cd -; mv baresip ../baresip
 
     - name: ldconfig
       if: ${{ runner.os == 'Linux' }}
