@@ -108,7 +108,7 @@ static int common_icdial(struct re_printf *pf, const char *cmd,
 	struct mbuf *uribuf = NULL;
 	struct ua *ua;
 	struct call *call;
-	struct pl n   = PL("Intercom");
+	struct pl n   = PL("Subject");
 	struct pl v   = PL_INIT;
 	const char *usage = "usage: /%s <address/number>"
 			" audio=<on,off>"
@@ -228,7 +228,7 @@ static int uag_add_xhdr_intercom(void)
 
 	for (le = list_head(uag_list()); le; le = le->next) {
 		struct ua *ua = le->data;
-		err = ua_add_xhdr_filter(ua, "Intercom");
+		err = ua_add_xhdr_filter(ua, "Subject");
 		if (err)
 			return err;
 	}

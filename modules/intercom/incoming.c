@@ -21,12 +21,6 @@ static int reject_call(struct call *call, uint16_t scode, const char *reason)
 }
 
 
-static bool is_intercom(const struct pl *name)
-{
-	return 0 == pl_strcmp(name, "Intercom");
-}
-
-
 static bool is_normal(const struct pl *val)
 {
 	return !pl_strcmp(val, "normal");
@@ -51,6 +45,21 @@ static bool is_surveillance(const struct pl *val)
 }
 
 
+static bool is_intercom(const struct pl *name, const struct pl *val)
+{
+	if (pl_strcmp(name, "Subject"))
+		return false;
+
+	if (is_normal(val) ||
+	    is_announcement(val) ||
+	    is_forcetalk(val) ||
+	    is_surveillance(val))
+		return true;
+
+	return false;
+}
+
+
 static int incoming_handler(const struct pl *name,
 		const struct pl *val, void *arg)
 {
@@ -66,7 +75,7 @@ static int incoming_handler(const struct pl *name,
 	if (!name || !val)
 		return 0;
 
-	if (!is_intercom(name))
+	if (!is_intercom(name, val))
 		return 0;
 
 	ardir =sdp_media_rdir(
@@ -146,10 +155,12 @@ static int outgoing_handler(const struct pl *name,
 	if (!name || !val)
 		return 0;
 
-	if (!is_intercom(name))
+	if (!is_intercom(name, val))
 		return 0;
 
 	module_event("intercom", "outgoing", ua, call, "%r", val);
+	module_event("intercom", "override-aufile", ua, call,
+		     "ringback_aufile:icringback_aufile");
 
 	return 0;
 }
@@ -166,7 +177,7 @@ static int established_handler(const struct pl *name,
 	if (!name || !val)
 		return 0;
 
-	if (!is_intercom(name))
+	if (!is_intercom(name, val))
 		return 0;
 
 	aldir =sdp_media_ldir(
