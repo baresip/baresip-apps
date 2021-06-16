@@ -60,6 +60,60 @@ static bool is_intercom(const struct pl *name, const struct pl *val)
 }
 
 
+/**
+ * Fetch parameter from a PL string. The separator can be specified
+ *
+ * @param pl    PL string to search
+ * @param pname Parameter name
+ * @param sep   Separator
+ * @param val   Parameter value, set on return
+ *
+ * @return true if found, false if not found
+ */
+static bool fmt_param_sep_get(const struct pl *pl, const char *pname, char sep,
+		struct pl *val)
+{
+	struct pl semi;
+	char expr[128];
+
+	if (!pl || !pname)
+		return false;
+
+	(void)re_snprintf(expr, sizeof(expr),
+		  "[%c]*[ \t\r\n]*%s[ \t\r\n]*=[ \t\r\n]*[~ \t\r\n%c]+",
+		  sep, pname, sep);
+
+	if (re_regex(pl->p, pl->l, expr, &semi, NULL, NULL, NULL, val))
+		return false;
+
+	return semi.l > 0 || pl->p == semi.p;
+}
+
+
+static bool account_extra_bool(const struct account *acc, const char *name,
+		bool *set)
+{
+	struct pl pl;
+	struct pl val;
+
+	pl_set_str(&pl, account_extra(acc));
+
+	if (!fmt_param_sep_get(&pl, name, ',', &val))
+		return false;
+
+	if (!pl_strcmp(&val, "yes")) {
+		*set = true;
+		return true;
+	}
+	else if (!pl_strcmp(&val, "no")) {
+		*set = false;
+		return true;
+	}
+
+	return false;
+}
+
+
 static int incoming_handler(const struct pl *name,
 		const struct pl *val, void *arg)
 {
@@ -92,6 +146,11 @@ static int incoming_handler(const struct pl *name,
 	(void)conf_get_bool(conf_cur(), "icallow_announce", &allow_announce);
 	(void)conf_get_bool(conf_cur(), "icallow_force", &allow_force);
 	(void)conf_get_bool(conf_cur(), "icallow_surveil", &allow_surveil);
+
+	(void)account_extra_bool(acc, "icprivacy", &privacy);
+	(void)account_extra_bool(acc, "icallow_announce", &allow_announce);
+	(void)account_extra_bool(acc, "icallow_force", &allow_force);
+	(void)account_extra_bool(acc, "icallow_surveil", &allow_surveil);
 
 	if (privacy && is_normal(val)) {
 		info("intercom: auto answer suppressed - privacy mode on\n");
