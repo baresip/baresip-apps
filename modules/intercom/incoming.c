@@ -60,6 +60,30 @@ static bool is_intercom(const struct pl *name, const struct pl *val)
 }
 
 
+static bool account_extra_bool(const struct account *acc, const char *name,
+		bool *set)
+{
+	struct pl pl;
+	struct pl val;
+
+	pl_set_str(&pl, account_extra(acc));
+
+	if (!fmt_param_sep_get(&pl, name, ',', &val))
+		return false;
+
+	if (!pl_strcmp(&val, "yes")) {
+		*set = true;
+		return true;
+	}
+	else if (!pl_strcmp(&val, "no")) {
+		*set = false;
+		return true;
+	}
+
+	return false;
+}
+
+
 static int incoming_handler(const struct pl *name,
 		const struct pl *val, void *arg)
 {
@@ -92,6 +116,11 @@ static int incoming_handler(const struct pl *name,
 	(void)conf_get_bool(conf_cur(), "icallow_announce", &allow_announce);
 	(void)conf_get_bool(conf_cur(), "icallow_force", &allow_force);
 	(void)conf_get_bool(conf_cur(), "icallow_surveil", &allow_surveil);
+
+	(void)account_extra_bool(acc, "icprivacy", &privacy);
+	(void)account_extra_bool(acc, "icallow_announce", &allow_announce);
+	(void)account_extra_bool(acc, "icallow_force", &allow_force);
+	(void)account_extra_bool(acc, "icallow_surveil", &allow_surveil);
 
 	if (privacy && is_normal(val)) {
 		info("intercom: auto answer suppressed - privacy mode on\n");
