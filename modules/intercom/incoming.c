@@ -60,36 +60,6 @@ static bool is_intercom(const struct pl *name, const struct pl *val)
 }
 
 
-/**
- * Fetch parameter from a PL string. The separator can be specified
- *
- * @param pl    PL string to search
- * @param pname Parameter name
- * @param sep   Separator
- * @param val   Parameter value, set on return
- *
- * @return true if found, false if not found
- */
-static bool fmt_param_sep_get(const struct pl *pl, const char *pname, char sep,
-		struct pl *val)
-{
-	struct pl semi;
-	char expr[128];
-
-	if (!pl || !pname)
-		return false;
-
-	(void)re_snprintf(expr, sizeof(expr),
-		  "[%c]*[ \t\r\n]*%s[ \t\r\n]*=[ \t\r\n]*[~ \t\r\n%c]+",
-		  sep, pname, sep);
-
-	if (re_regex(pl->p, pl->l, expr, &semi, NULL, NULL, NULL, val))
-		return false;
-
-	return semi.l > 0 || pl->p == semi.p;
-}
-
-
 static bool account_extra_bool(const struct account *acc, const char *name,
 		bool *set)
 {
