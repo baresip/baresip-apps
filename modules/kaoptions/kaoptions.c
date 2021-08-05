@@ -26,7 +26,7 @@
  * parameter `extra`.
  *
  * Example:
- * <sip:A@sip.example.com>;extra=kaptions=30
+ * <sip:A@sip.example.com>;extra=kaoptions=30
  *
  */
 
