@@ -17,6 +17,9 @@ USE_INTERCOM := 1
 USE_KAOPTIONS:= 1
 endif
 
+MODULES += auloop
+MODULES += vidloop
+
 ifneq ($(USE_AUTOTEST),)
 MODULES += autotest
 endif
