@@ -80,8 +80,8 @@ static void dial(void *arg)
 	if (!d.mbdial)
 		return;
 
-	info("autotest: dial (%r)\n", &pl);
 	pl_set_mbuf(&pl, d.mbdial);
+	info("autotest: dial (%r)\n", &pl);
 	err = cmd_process_long(baresip_commands(), pl.p, pl.l, &pf, NULL);
 
 	if (err) {
