@@ -223,6 +223,9 @@ static void ua_event_handler(struct ua *ua, enum ua_event ev,
 		case UA_EVENT_REGISTER_FAIL:
 				kaoptions_stop(ua);
 			break;
+		case UA_EVENT_UNREGISTERING:
+				kaoptions_stop(ua);
+			break;
 
 		default:
 			break;
