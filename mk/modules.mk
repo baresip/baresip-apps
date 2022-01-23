@@ -19,6 +19,7 @@ endif
 
 MODULES += auloop
 MODULES += vidloop
+MODULES += b2bua
 
 ifneq ($(USE_AUTOTEST),)
 MODULES += autotest
