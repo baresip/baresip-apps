@@ -45,6 +45,15 @@ static bool is_surveillance(const struct pl *val)
 }
 
 
+static bool is_preview(const struct pl *val)
+{
+	struct pl subj = PL("preview");
+
+	(void)conf_get(conf_cur(), "icpreview_subject", &subj);
+	return !strncmp(val->p, subj.p, subj.l);
+}
+
+
 static bool is_intercom(const struct pl *name, const struct pl *val)
 {
 	if (pl_strcmp(name, "Subject"))
@@ -53,7 +62,8 @@ static bool is_intercom(const struct pl *name, const struct pl *val)
 	if (is_normal(val) ||
 	    is_announcement(val) ||
 	    is_forcetalk(val) ||
-	    is_surveillance(val))
+	    is_surveillance(val) ||
+	    is_preview(val))
 		return true;
 
 	return false;
@@ -95,6 +105,7 @@ static int incoming_handler(const struct pl *name,
 	bool allow_announce = true;
 	bool allow_force    = false;
 	bool allow_surveil  = false;
+	int err = 0;
 
 	if (!name || !val)
 		return 0;
@@ -171,7 +182,13 @@ static int incoming_handler(const struct pl *name,
 		return 0;
 	}
 
-	return 0;
+	if (is_preview(val)) {
+		module_event("intercom", "override-aufile", ua, call,
+				"ring_aufile:icpreview_aufile");
+		err |= call_progress_dir(call, SDP_INACTIVE, SDP_RECVONLY);
+	}
+
+	return err;
 }
 
 
