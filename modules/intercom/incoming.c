@@ -237,7 +237,6 @@ static int established_handler(const struct pl *name,
 		call_set_media_direction(call,
 				aldir ? SDP_SENDRECV : SDP_INACTIVE,
 				vldir ? SDP_SENDRECV : SDP_INACTIVE);
-		return 0;
 	}
 
 	module_event("intercom", outgoing ?
