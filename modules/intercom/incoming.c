@@ -9,6 +9,7 @@
 #include <re.h>
 #include <baresip.h>
 
+#include "iccustom.h"
 #include "intercom.h"
 
 static int reject_call(struct call *call, uint16_t scode, const char *reason)
@@ -63,7 +64,8 @@ static bool is_intercom(const struct pl *name, const struct pl *val)
 	    is_announcement(val) ||
 	    is_forcetalk(val) ||
 	    is_surveillance(val) ||
-	    is_preview(val))
+	    is_preview(val) ||
+	    ic_is_custom(val))
 		return true;
 
 	return false;
@@ -146,6 +148,18 @@ static int incoming_handler(const struct pl *name,
 	if (is_normal(val)) {
 		module_event("intercom", "override-aufile", ua, call,
 				"sip_autoanswer_aufile:icnormal_aufile");
+		return 0;
+	}
+
+	if (ic_is_custom(val)) {
+		struct pl *auf = iccustom_aufile(val);
+		if (!iccustom_allowed(val)) {
+			reject_call(call, 406, "Not Acceptable");
+			return 0;
+		}
+
+		module_event("intercom", "override-aufile", ua, call,
+				"sip_autoanswer_aufile:%r", auf);
 		return 0;
 	}
 
