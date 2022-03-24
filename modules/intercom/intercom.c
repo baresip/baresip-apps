@@ -50,7 +50,17 @@
 #define DEBUG_LEVEL 5
 #include <re_dbg.h>
 
+#include "iccustom.h"
 #include "intercom.h"
+
+struct intercom {
+	int32_t adelay;           /**< Answer delay for outgoing calls     */
+	enum answer_method met;   /**< SIP auto answer method              */
+
+	struct tmr tmr;           /**< Timer for mem_deref later           */
+	struct list deref;        /**< List of mem objects to deref        */
+	struct hash *custom;      /**< Hash for custom intercom call types */
+};
 
 static struct intercom st;
 
@@ -106,7 +116,7 @@ static int cmd_set_adelay(struct re_printf *pf, void *arg)
 }
 
 
-static int common_icdial(struct re_printf *pf, const char *cmd,
+int common_icdial(struct re_printf *pf, const char *cmd,
 		enum sdp_dir dir, const char *prm, const char *hdr)
 {
 	int err;
@@ -259,6 +269,20 @@ static const struct cmd cmdv[] = {
 };
 
 
+struct iccustom *iccustom_find(const struct pl *val)
+{
+	struct pl key;
+	struct le *le;
+
+	key = *val;
+	le = hash_apply(st.custom, iccustom_lookup, &key);
+	if (le)
+		return le->data;
+
+	return NULL;
+}
+
+
 static int module_init(void)
 {
 	int err;
@@ -266,6 +290,9 @@ static int module_init(void)
 
 	memset(&st, 0, sizeof(st));
 	st.met = ANSM_RFC5373;
+	err = hash_alloc(&st.custom, 32);
+	if (err)
+		return err;
 
 	err = cmd_register(baresip_commands(), cmdv, ARRAY_SIZE(cmdv));
 	(void)conf_get(conf_cur(), "sip_autoanswer_method", &met);
@@ -274,8 +301,10 @@ static int module_init(void)
 	else if (!pl_strcmp(&met, "alert-info"))
 		st.met = ANSM_ALERTINFO;
 
+	(void)conf_apply(conf_cur(), "iccustom", iccustom_handler, st.custom);
 	err |= uag_event_register(ua_event_handler, NULL);
 	err |= uag_add_xhdr_intercom();
+	err |= iccustom_init();
 
 	info("intercom: init\n");
 	return err;
@@ -285,8 +314,11 @@ static int module_init(void)
 static int module_close(void)
 {
 
+	hash_flush(st.custom);
+	mem_deref(st.custom);
 	cmd_unregister(baresip_commands(), cmdv);
 	uag_event_unregister(ua_event_handler);
+	iccustom_close();
 
 	return 0;
 }
