@@ -36,6 +36,19 @@
  * icpreview_subject            preview
  * icpreview_aufile             preview.wav
  *
+ * Custom intercom calls:
+ * #iccustom                     <subject-prefix>,<dir>,<allow>,<aufile_key>
+ * #  subject-prefix  ...  The prefix for the Subject header, in order to
+ * #                       identify the custom intercom call.
+ * #  dir             ...  The media direction. [sendrecv, sendonly, recvonly,
+ * #                       inactive]
+ * #  allow           ...  The callee uses this to decide if the incoming call
+ * #                       is allowed or should be rejected.
+ * #  aufile_key      ...  The config key for the auto answer file.
+ * # e.g.:
+ * iccustom                     Intercom/UID,sendrecv,true,ic_aufile
+ * ic_aufile                    beep.wav
+ *
  * Extra accounts address parameters:
  * The settings for icprivacy, icallow_announce, icallow_force, icallow_surveil
  * can be overwritten by specifying address parameter `extra` in accounts file.
