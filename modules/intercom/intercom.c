@@ -241,6 +241,24 @@ static int cmd_surveil(struct re_printf *pf, void *arg)
 }
 
 
+static int cmd_reload(struct re_printf *pf, void *arg)
+{
+	int err;
+	(void) arg;
+
+	err = conf_configure();
+	if (err) {
+		(void)re_hprintf(pf, "icreload failed (%m)\n", err);
+		return err;
+	}
+
+	hash_flush(st.custom);
+	err = conf_apply(conf_cur(), "iccustom", iccustom_handler,
+			 st.custom);
+	return err;
+}
+
+
 static int uag_add_xhdr_intercom(void)
 {
 	struct le *le;
@@ -265,6 +283,7 @@ static const struct cmd cmdv[] = {
 {"icannounce",  0, CMD_PRM, "Intercom announcement",           cmd_announce},
 {"icforce",     0, CMD_PRM, "Intercom force during privacy",   cmd_force},
 {"icsurveil",   0, CMD_PRM, "Intercom surveil peer",           cmd_surveil},
+{"icreload",    0,       0, "Intercom reload config",          cmd_reload},
 
 };
 
