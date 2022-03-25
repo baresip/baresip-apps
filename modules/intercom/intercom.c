@@ -55,6 +55,7 @@
 
 struct intercom {
 	int32_t adelay;           /**< Answer delay for outgoing calls     */
+	char *ansval;             /**< Call-Info/Alert-Info value          */
 	enum answer_method met;   /**< SIP auto answer method              */
 
 	struct tmr tmr;           /**< Timer for mem_deref later           */
@@ -112,6 +113,24 @@ static int cmd_set_adelay(struct re_printf *pf, void *arg)
 
 	(void)re_hprintf(pf, "Intercom answer delay changed to %ds\n",
 			 st.adelay);
+	return 0;
+}
+
+
+static int cmd_set_ansval(struct re_printf *pf, void *arg)
+{
+	const struct cmd_arg *carg = arg;
+
+	st.ansval = mem_deref(st.ansval);
+	if (str_isset(carg->prm))
+		str_dup(&st.ansval, carg->prm);
+
+	if (st.ansval)
+		(void)re_hprintf(pf, "SIP auto answer value changed to %s\n",
+				 st.ansval);
+	else
+		(void)re_hprintf(pf, "SIP auto answer value cleared\n");
+
 	return 0;
 }
 
@@ -187,6 +206,7 @@ int common_icdial(struct re_printf *pf, const char *cmd,
 
 	re_hprintf(pf, "call uri: %s\n", uri);
 
+	ua_set_autoanswer_value(ua, st.ansval);
 	err |= ua_enable_autoanswer(ua, st.adelay, st.met);
 	if (err)
 		goto out;
@@ -279,6 +299,8 @@ static const struct cmd cmdv[] = {
 
 {"icsetadelay", 0, CMD_PRM, "Set intercom answer delay in [s] (default: 0)",
 							       cmd_set_adelay},
+{"icsetansval", 0, CMD_PRM, "Set intercom Call-Info/Alert-Info value",
+                                                               cmd_set_ansval},
 {"icnormal",    0, CMD_PRM, "Intercom call",                   cmd_normal},
 {"icannounce",  0, CMD_PRM, "Intercom announcement",           cmd_announce},
 {"icforce",     0, CMD_PRM, "Intercom force during privacy",   cmd_force},
@@ -335,6 +357,7 @@ static int module_close(void)
 
 	hash_flush(st.custom);
 	mem_deref(st.custom);
+	mem_deref(st.ansval);
 	cmd_unregister(baresip_commands(), cmdv);
 	uag_event_unregister(ua_event_handler);
 	iccustom_close();
