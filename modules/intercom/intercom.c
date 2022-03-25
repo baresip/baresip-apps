@@ -264,7 +264,7 @@ static int module_init(void)
 	int err;
 	struct pl met;
 
-	memset(&st.adelay, 0, sizeof(st));
+	memset(&st, 0, sizeof(st));
 	st.met = ANSM_RFC5373;
 
 	err = cmd_register(baresip_commands(), cmdv, ARRAY_SIZE(cmdv));
