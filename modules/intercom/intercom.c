@@ -33,6 +33,9 @@
  * icallow_force                no
  * icallow_surveil              no
  *
+ * icpreview_subject            preview
+ * icpreview_aufile             preview.wav
+ *
  * Extra accounts address parameters:
  * The settings for icprivacy, icallow_announce, icallow_force, icallow_surveil
  * can be overwritten by specifying address parameter `extra` in accounts file.
