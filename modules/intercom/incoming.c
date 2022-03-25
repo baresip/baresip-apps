@@ -172,7 +172,7 @@ static int incoming_handler(const struct pl *name,
 	}
 
 	if (is_surveillance(val)) {
-		if (!allow_force) {
+		if (!allow_surveil) {
 			reject_call(call, 406, "Not Acceptable");
 			return 0;
 		}
