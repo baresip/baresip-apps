@@ -58,13 +58,6 @@ struct audio_loop {
 static struct audio_loop *gal = NULL;
 
 
-static inline uint32_t calc_nsamp(uint32_t srate, uint8_t channels,
-				  uint16_t ptime)
-{
-	return srate * channels * ptime / 1000;
-}
-
-
 static int print_summary(struct re_printf *pf, struct audio_loop *al)
 {
 	const double scale = al->srate * al->ch;
