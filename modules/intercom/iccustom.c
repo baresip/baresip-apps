@@ -47,7 +47,7 @@ static int cmd_custom(struct re_printf *pf, void *arg)
 			" video=<on,off>\n";
 
 
-	err = re_regex(p, strlen(p), "[^ ]* [^ ]* audio=[onf]* video=[onf]*",
+	err = re_regex(p, str_len(p), "[^ ]* [^ ]* audio=[onf]* video=[onf]*",
 		       &subject, NULL, NULL, NULL);
 	if (err) {
 		warning("iccustom: could not parse %s (%m)\n", p, err);
