@@ -340,7 +340,7 @@ struct iccustom *iccustom_find(const struct pl *val)
 static int module_init(void)
 {
 	int err;
-	struct pl met;
+	struct pl met = PL_INIT;
 
 	memset(&st, 0, sizeof(st));
 	st.met = ANSM_RFC5373;

@@ -75,10 +75,13 @@ static bool is_intercom(const struct pl *name, const struct pl *val)
 static bool account_extra_bool(const struct account *acc, const char *name,
 		bool *set)
 {
-	struct pl pl;
-	struct pl val;
+	struct pl pl = PL_INIT;
+	struct pl val = PL_INIT;
 
 	pl_set_str(&pl, account_extra(acc));
+
+	if (!pl_isset(&pl))
+		return false;
 
 	if (!fmt_param_sep_get(&pl, name, ',', &val))
 		return false;
