@@ -276,6 +276,10 @@ void ua_event_handler(struct ua *ua, enum ua_event ev,
 
 	switch (ev) {
 
+	case UA_EVENT_CREATE:
+		ua_add_xhdr_filter(ua, "Subject");
+		break;
+
 	case UA_EVENT_CALL_INCOMING:
 
 		hdrs = call_get_custom_hdrs(call);
