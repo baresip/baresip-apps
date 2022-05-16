@@ -8,6 +8,7 @@
 #include <string.h>
 #include <time.h>
 #include <re.h>
+#include <re_h264.h>
 #include <rem.h>
 #include <baresip.h>
 
