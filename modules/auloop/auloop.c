@@ -37,7 +37,7 @@ struct audio_loop {
 	struct ausrc_st *ausrc;
 	const struct auplay *ap;
 	struct auplay_st *auplay;
-	struct lock *lock;
+	mtx_t *mtx;
 	struct tmr tmr;
 	uint32_t srate;
 	uint8_t ch;
@@ -149,7 +149,7 @@ static void auloop_destructor(void *arg)
 	mem_deref(al->ausrc);
 	mem_deref(al->auplay);
 	mem_deref(al->aubuf);
-	mem_deref(al->lock);
+	mem_deref(al->mtx);
 }
 
 
@@ -159,7 +159,7 @@ static void print_stats(struct audio_loop *al)
 	double delay;
 	const double scale = al->srate * al->ch;
 
-	lock_read_get(al->lock);
+	mtx_lock(al->mtx);
 
 	delay = (double)al->stats_src.n_samp - (double)al->stats_play.n_samp;
 
@@ -176,7 +176,7 @@ static void print_stats(struct audio_loop *al)
 
 	(void)re_fprintf(stdout, "          \r");
 
-	lock_rel(al->lock);
+	mtx_unlock(al->mtx);
 
 	fflush(stdout);
 }
@@ -203,7 +203,7 @@ static void src_read_handler(struct auframe *af, void *arg)
 		return;
 	}
 
-	lock_write_get(al->lock);
+	mtx_lock(al->mtx);
 
 	stats->n_samp   += af->sampc;
 	stats->n_frames += 1;
@@ -212,7 +212,7 @@ static void src_read_handler(struct auframe *af, void *arg)
 		++al->aubuf_overrun;
 	}
 
-	lock_rel(al->lock);
+	mtx_unlock(al->mtx);
 
 	err = aubuf_write(al->aubuf, af->sampv, auframe_size(af));
 	if (err) {
@@ -232,7 +232,7 @@ static void write_handler(struct auframe *af, void *arg)
 			aufmt_name(al->fmt), aufmt_name(af->fmt));
 	}
 
-	lock_write_get(al->lock);
+	mtx_lock(al->mtx);
 
 	stats->n_samp   += af->sampc;
 	stats->n_frames += 1;
@@ -241,7 +241,7 @@ static void write_handler(struct auframe *af, void *arg)
 		++al->aubuf_underrun;
 	}
 
-	lock_rel(al->lock);
+	mtx_unlock(al->mtx);
 
 	/* read from beginning */
 	aubuf_read(al->aubuf, af->sampv, num_bytes);
@@ -343,7 +343,7 @@ static int audio_loop_alloc(struct audio_loop **alp,
 	if (!al)
 		return ENOMEM;
 
-	err = lock_alloc(&al->lock);
+	err = mtx_alloc(&al->mtx);
 	if (err)
 		goto out;
 
