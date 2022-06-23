@@ -80,7 +80,7 @@ struct video_loop {
 	enum vidfmt disp_fmt;
 	struct vidframe *frame;
 	uint64_t frame_timestamp;
-	struct lock *frame_mutex;
+	mtx_t *frame_mutex;
 	bool new_frame;
 	uint64_t ts_start;      /* usec */
 	uint64_t ts_last;       /* usec */
@@ -154,7 +154,7 @@ static void display_handler(void *arg)
 
 	tmr_start(&vl->tmr_display, 10, display_handler, vl);
 
-	lock_write_get(vl->frame_mutex);
+	mtx_lock(vl->frame_mutex);
 
 	if (!vl->new_frame)
 		goto out;
@@ -172,7 +172,7 @@ static void display_handler(void *arg)
 	++vl->stats.disp_frames;
 
  out:
-	lock_rel(vl->frame_mutex);
+	mtx_unlock(vl->frame_mutex);
 }
 
 
@@ -218,7 +218,7 @@ static int display(struct video_loop *vl, struct vidframe *frame,
 	vl->disp_size = frame->size;
 	vl->disp_fmt = frame->fmt;
 
-	lock_write_get(vl->frame_mutex);
+	mtx_lock(vl->frame_mutex);
 
 	if (vl->frame && ! vidsz_cmp(&vl->frame->size, &frame->size)) {
 
@@ -239,7 +239,7 @@ static int display(struct video_loop *vl, struct vidframe *frame,
 	vl->new_frame = true;
 
  out:
-	lock_rel(vl->frame_mutex);
+	mtx_unlock(vl->frame_mutex);
 
 	mem_deref(frame_filt);
 
@@ -526,11 +526,11 @@ static void vidloop_destructor(void *arg)
 	mem_deref(vl->dec);
 	tmr_cancel(&vl->tmr_update_src);
 
-	lock_write_get(vl->frame_mutex);
+	mtx_lock(vl->frame_mutex);
 	mem_deref(vl->vidisp);
 	mem_deref(vl->frame);
 	tmr_cancel(&vl->tmr_display);
-	lock_rel(vl->frame_mutex);
+	mtx_unlock(vl->frame_mutex);
 
 	list_flush(&vl->filtencl);
 	list_flush(&vl->filtdecl);
@@ -729,7 +729,7 @@ static int video_loop_alloc(struct video_loop **vlp)
 	vl->src_fmt = -1;
 	vl->disp_fmt = -1;
 
-	err = lock_alloc(&vl->frame_mutex);
+	err = mtx_alloc(&vl->frame_mutex);
 	if (err)
 		goto out;
 
