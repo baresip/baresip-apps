@@ -729,7 +729,7 @@ static int video_loop_alloc(struct video_loop **vlp)
 	vl->src_fmt = -1;
 	vl->disp_fmt = -1;
 
-	err = mtx_alloc(&vl->frame_mutex);
+	err = mutex_alloc(&vl->frame_mutex);
 	if (err)
 		goto out;
 
