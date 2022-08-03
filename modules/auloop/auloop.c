@@ -343,7 +343,7 @@ static int audio_loop_alloc(struct audio_loop **alp,
 	if (!al)
 		return ENOMEM;
 
-	err = mtx_alloc(&al->mtx);
+	err = mutex_alloc(&al->mtx);
 	if (err)
 		goto out;
 
