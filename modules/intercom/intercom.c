@@ -64,6 +64,7 @@
 #include <re_dbg.h>
 
 #include "iccustom.h"
+#include "ichidden.h"
 #include "intercom.h"
 
 struct intercom {
@@ -149,7 +150,8 @@ static int cmd_set_ansval(struct re_printf *pf, void *arg)
 
 
 int common_icdial(struct re_printf *pf, const char *cmd,
-		enum sdp_dir dir, const char *prm, const char *hdr)
+		  enum sdp_dir dir, const char *prm, const char *hdr,
+		  struct call **callp)
 {
 	int err;
 	struct pl to  = PL_INIT;
@@ -229,6 +231,8 @@ int common_icdial(struct re_printf *pf, const char *cmd,
 		goto out;
 
 	re_hprintf(pf, "call id: %s\n", call_id(call));
+	if (callp)
+		*callp = call;
 out:
 	mem_deref(uribuf);
 	mem_deref(uri);
@@ -243,7 +247,7 @@ static int cmd_normal(struct re_printf *pf, void *arg)
 	const struct cmd_arg *carg = arg;
 
 	return common_icdial(pf, "icnormal", SDP_SENDRECV,
-			     carg->prm, "normal");
+			     carg->prm, "normal", NULL);
 }
 
 
@@ -252,7 +256,7 @@ static int cmd_announce(struct re_printf *pf, void *arg)
 	const struct cmd_arg *carg = arg;
 
 	return common_icdial(pf, "icannounce", SDP_SENDONLY,
-			     carg->prm, "announcement");
+			     carg->prm, "announcement", NULL);
 }
 
 
@@ -261,7 +265,7 @@ static int cmd_force(struct re_printf *pf, void *arg)
 	const struct cmd_arg *carg = arg;
 
 	return common_icdial(pf, "icforce", SDP_SENDONLY,
-			     carg->prm, "forcetalk");
+			     carg->prm, "forcetalk", NULL);
 }
 
 
@@ -270,7 +274,7 @@ static int cmd_surveil(struct re_printf *pf, void *arg)
 	const struct cmd_arg *carg = arg;
 
 	return common_icdial(pf, "icsurveil", SDP_RECVONLY,
-			carg->prm, "surveillance");
+			carg->prm, "surveillance", NULL);
 }
 
 
@@ -359,6 +363,7 @@ static int module_init(void)
 	err |= uag_event_register(ua_event_handler, NULL);
 	err |= uag_add_xhdr_intercom();
 	err |= iccustom_init();
+	err |= ichidden_init();
 
 	info("intercom: init\n");
 	return err;
@@ -374,6 +379,7 @@ static int module_close(void)
 	cmd_unregister(baresip_commands(), cmdv);
 	uag_event_unregister(ua_event_handler);
 	iccustom_close();
+	ichidden_close();
 
 	return 0;
 }

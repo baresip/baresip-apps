@@ -5,6 +5,6 @@
 #
 
 MOD		:= intercom
-$(MOD)_SRCS	+= intercom.c incoming.c iccustom.c
+$(MOD)_SRCS	+= intercom.c events.c iccustom.c ichidden.c
 
 include mk/mod.mk
