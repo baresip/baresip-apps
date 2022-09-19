@@ -88,6 +88,7 @@ static int call_send_code(struct call *call, const char *code)
 static void proc_hidden_call(void *arg)
 {
 	struct hidden_call *hc = arg;
+	struct call *call = hc->call;
 
 	switch (hc->state) {
 		case HIDDEN_SEND:
@@ -96,8 +97,13 @@ static void proc_hidden_call(void *arg)
 			tmr_start(&hc->tmr, 20, proc_hidden_call, hc);
 			break;
 		case HIDDEN_CLOSE:
-			call_hangup(hc->call, 0, NULL);
-			mem_deref(hc);
+			if (audio_txtelev_empty(call_audio(call))) {
+				call_hangup(hc->call, 0, NULL);
+				mem_deref(hc);
+			}
+			else {
+				tmr_start(&hc->tmr, 20, proc_hidden_call, hc);
+			}
 			break;
 		default:
 			break;
@@ -171,6 +177,10 @@ int call_hidden_start(struct call *call)
 	if (!hc)
 		return EINVAL;
 
+	if (hc->state != HIDDEN_ESTABLISHED)
+		return EINVAL;
+
+	hc->state = HIDDEN_SEND;
 	tmr_start(&hc->tmr, 20, proc_hidden_call, hc);
 	return 0;
 }
