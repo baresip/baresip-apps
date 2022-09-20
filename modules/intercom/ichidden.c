@@ -44,9 +44,13 @@ static void hidden_call_destructor(void *arg)
 }
 
 
-int hidden_call_append(struct call *call, const struct pl *code)
+static int hidden_call_append(struct call *call, const struct pl *code)
 {
 	struct hidden_call *hc;
+
+	if (!call || !code)
+		return EINVAL;
+
 	hc = mem_zalloc(sizeof(*hc), hidden_call_destructor);
 	if (!hc)
 		return ENOMEM;
@@ -173,7 +177,12 @@ static const struct cmd cmdv[] = {
 
 int call_hidden_start(struct call *call)
 {
-	struct hidden_call *hc = call_hidden_find(call);
+	struct hidden_call *hc;
+
+	if (!call)
+		return EINVAL;
+
+	hc = call_hidden_find(call);
 	if (!hc)
 		return EINVAL;
 
@@ -188,7 +197,12 @@ int call_hidden_start(struct call *call)
 
 void call_hidden_close(struct call *call)
 {
-	struct hidden_call *hc = call_hidden_find(call);
+	struct hidden_call *hc;
+
+	if (!call)
+		return;
+
+	hc = call_hidden_find(call);
 	if (!hc)
 		return;
 
