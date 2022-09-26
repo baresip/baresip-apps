@@ -1,5 +1,5 @@
 /**
- * @file incoming.c Intercom module process incoming calls
+ * @file events.c Intercom module process UA events
  *
  * Copyright (C) 2021 Commend.com - c.spielberger@commend.com
  */
@@ -10,6 +10,7 @@
 #include <baresip.h>
 
 #include "iccustom.h"
+#include "ichidden.h"
 #include "intercom.h"
 
 static int reject_call(struct call *call, uint16_t scode, const char *reason)
@@ -46,6 +47,12 @@ static bool is_surveillance(const struct pl *val)
 }
 
 
+static bool is_hidden(const struct pl *val)
+{
+	return !pl_strcmp(val, "hidden");
+}
+
+
 static bool is_preview(const struct pl *val)
 {
 	struct pl subj = PL("preview");
@@ -65,6 +72,7 @@ static bool is_intercom(const struct pl *name, const struct pl *val)
 	    is_forcetalk(val) ||
 	    is_surveillance(val) ||
 	    is_preview(val) ||
+	    is_hidden(val) ||
 	    ic_is_custom(val))
 		return true;
 
@@ -110,6 +118,7 @@ static int incoming_handler(const struct pl *name,
 	bool allow_announce = true;
 	bool allow_force    = false;
 	bool allow_surveil  = false;
+	bool allow_hidden   = false;
 	int err = 0;
 
 	if (!name || !val)
@@ -132,17 +141,32 @@ static int incoming_handler(const struct pl *name,
 	(void)conf_get_bool(conf_cur(), "icallow_announce", &allow_announce);
 	(void)conf_get_bool(conf_cur(), "icallow_force", &allow_force);
 	(void)conf_get_bool(conf_cur(), "icallow_surveil", &allow_surveil);
+	(void)conf_get_bool(conf_cur(), "icallow_hidden", &allow_hidden);
 
 	(void)account_extra_bool(acc, "icprivacy", &privacy);
 	(void)account_extra_bool(acc, "icallow_announce", &allow_announce);
 	(void)account_extra_bool(acc, "icallow_force", &allow_force);
 	(void)account_extra_bool(acc, "icallow_surveil", &allow_surveil);
+	(void)account_extra_bool(acc, "icallow_hidden", &allow_hidden);
 
 	if (privacy && is_normal(val)) {
 		info("intercom: auto answer suppressed - privacy mode on\n");
 		call_set_answer_delay(call, -1);
 		module_event("intercom", "override-aufile", ua, call,
 				"ring_aufile:icring_aufile");
+		return 0;
+	}
+
+	if (is_hidden(val)) {
+		int32_t adelay = call_answer_delay(call);
+		if (!allow_hidden) {
+			reject_call(call, 406, "Not Acceptable");
+			return 0;
+		}
+
+		if (adelay >= 0)
+			call_start_answtmr(call, adelay);
+
 		return 0;
 	}
 
@@ -210,9 +234,9 @@ static int incoming_handler(const struct pl *name,
 
 
 static int outgoing_handler(const struct pl *name,
-		const struct pl *val, void *arg)
+			    const struct pl *val, void *arg)
 {
-	struct call    *call = arg;
+	struct call *call = arg;
 	struct ua *ua  = call_get_ua(call);
 
 	if (!name || !val)
@@ -225,6 +249,22 @@ static int outgoing_handler(const struct pl *name,
 	module_event("intercom", "override-aufile", ua, call,
 		     "ringback_aufile:icringback_aufile");
 
+	return 0;
+}
+
+
+static int check_hidden(const struct pl *name,
+			const struct pl *val, void *arg)
+{
+	struct call *call = arg;
+
+	if (!name || !val)
+		return 0;
+
+	if (!is_intercom(name, val))
+		return 0;
+
+	call_set_evstop(call, is_hidden(val));
 	return 0;
 }
 
@@ -243,7 +283,14 @@ static int established_handler(const struct pl *name,
 	if (!is_intercom(name, val))
 		return 0;
 
-	aldir =sdp_media_ldir(
+	if (outgoing && is_hidden(val)) {
+		call_hidden_start(call);
+
+		audio_mute(call_audio(call), true);
+		return 0;
+	}
+
+	aldir = sdp_media_ldir(
 			stream_sdpmedia(audio_strm(call_audio(call))));
 	vldir = sdp_media_ldir(
 			stream_sdpmedia(video_strm(call_video(call))));
@@ -257,8 +304,8 @@ static int established_handler(const struct pl *name,
 	}
 
 	module_event("intercom", outgoing ?
-			"outgoing-established" : "incoming-established",
-			ua, call, "%r", val);
+		     "outgoing-established" : "incoming-established",
+		     ua, call, "%r", val);
 	return 0;
 }
 
@@ -271,8 +318,13 @@ void ua_event_handler(struct ua *ua, enum ua_event ev,
 	(void)arg;
 	(void)ua;
 
-	if (call_state(call)==CALL_STATE_TERMINATED)
-		return;
+	if (call) {
+		hdrs = call_get_custom_hdrs(call);
+		if (ev != UA_EVENT_CALL_DTMF_START &&
+		    ev != UA_EVENT_CALL_DTMF_END) {
+			(void)custom_hdrs_apply(hdrs, check_hidden, call);
+		}
+	}
 
 	switch (ev) {
 
@@ -282,7 +334,6 @@ void ua_event_handler(struct ua *ua, enum ua_event ev,
 
 	case UA_EVENT_CALL_INCOMING:
 
-		hdrs = call_get_custom_hdrs(call);
 		(void)custom_hdrs_apply(hdrs, incoming_handler, call);
 		break;
 
@@ -290,17 +341,18 @@ void ua_event_handler(struct ua *ua, enum ua_event ev,
 		if (call_state(call) != CALL_STATE_OUTGOING)
 			break;
 
-		hdrs = call_get_custom_hdrs(call);
 		(void)custom_hdrs_apply(hdrs, outgoing_handler, call);
 		break;
 
 	case UA_EVENT_CALL_ESTABLISHED:
 
-		if (!call_is_outgoing(call))
-			break;
-
-		hdrs = call_get_custom_hdrs(call);
 		(void)custom_hdrs_apply(hdrs, established_handler, call);
+		break;
+
+
+	case UA_EVENT_CALL_CLOSED:
+		call_hidden_close(call);
+
 		break;
 
 	default:

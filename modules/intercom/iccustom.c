@@ -66,7 +66,7 @@ static int cmd_custom(struct re_printf *pf, void *arg)
 	if (err)
 		return err;
 
-	err = common_icdial(pf, "iccustom", c->dir, carg->prm, sub);
+	err = common_icdial(pf, "iccustom", c->dir, carg->prm, sub, NULL);
 	mem_deref(sub);
 	return err;
 }
