@@ -7,6 +7,8 @@ See [Wiki: Install Stable Release](https://github.com/baresip/baresip/wiki/Insta
 or [Wiki: Install GIT Version](https://github.com/baresip/baresip/wiki/Install:-GIT-Version)
 for a full guide.
 
+```bash
 $ cd baresip 
 $ cmake -B build -DAPP_MODULES_DIR=../baresip-apps/modules -DAPP_MODULES="auloop;vidloop"
 $ cmake --build build -j
+```
