@@ -6,26 +6,10 @@
 # Copyright (C) 2023 Christian Spielberger
 #
 
-##############################################################################
-#
-# Versioning
-#
-
 cmake_minimum_required(VERSION 3.10)
 
 project(baresip-apps VERSION 2.9.0)
 
-set(PROJECT_SOVERSION 1) # bump if ABI breaks
-
-# Pre-release identifier, comment out on a release
-# Increment for breaking changes (dev2, dev3...)
-set(PROJECT_VERSION_PRE dev)
-
-if(PROJECT_VERSION_PRE)
-  set(PROJECT_VERSION_FULL ${PROJECT_VERSION}-${PROJECT_VERSION_PRE})
-else()
-  set(PROJECT_VERSION_FULL ${PROJECT_VERSION})
-endif()
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 
@@ -174,29 +158,6 @@ else()
                             LINK_FLAGS "-undefined dynamic_lookup")
     endif()
   endforeach()
-endif()
-
-
-##############################################################################
-#
-# Main target library
-#
-
-set(LINKLIBS ${REM_LIBRARIES} ${RE_LIBRARIES} Threads::Threads)
-
-if(ZLIB_FOUND)
-  list(APPEND LINKLIBS ZLIB::ZLIB)
-endif()
-
-if(USE_OPENSSL)
-  list(APPEND LINKLIBS OpenSSL::SSL OpenSSL::Crypto)
-endif()
-
-if(WIN32)
-  list(APPEND LINKLIBS ws2_32 iphlpapi winmm gdi32 crypt32 strmiids
-      ole32 oleaut32 qwave)
-else()
-  list(APPEND LINKLIBS -lm)
 endif()
 
 
