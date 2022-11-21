@@ -19,6 +19,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+
+    - name: Fix Ubuntu 22.04
+      if: ${{ matrix.os == 'ubuntu-22.04' }}
+      run: |
+        sudo apt-get remove libunwind-14 -y
+        sudo apt-get install libunwind-dev -y
+
     - name: install packages
       if: ${{ runner.os == 'Linux' }}
       run: |
