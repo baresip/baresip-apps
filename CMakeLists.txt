@@ -91,6 +91,7 @@ include_directories(
   /usr/local/include
   ${RE_INCLUDE_DIRS}
   ${REM_INCLUDE_DIRS}
+  ${BARESIP_INCLUDE_DIRS}
   ${OPENSSL_INCLUDE_DIR}
 )
 
