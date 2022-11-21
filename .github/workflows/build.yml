@@ -82,21 +82,17 @@ jobs:
         repo: https://github.com/baresip/baresip
         secret: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: make re/rem
+    - name: make re/rem/baresip
       run: |
         for p in re rem; do
           cmake -S $p -B $p/build
           cmake --build $p/build -j
         done
-        for p in re rem; do
-          mv $p ../.
-        done
-
-    - name: make baresip
-      run: |
         cmake -S baresip -B baresip/build -DMODULES=
         cmake --build baresip/build -j -t baresip
-        mv baresip ../.
+        for p in re rem baresip; do
+          mv $p ../.
+        done
 
     - name: ldconfig
       if: ${{ runner.os == 'Linux' }}
