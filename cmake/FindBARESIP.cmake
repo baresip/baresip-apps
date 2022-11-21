@@ -1,8 +1,8 @@
 find_package(PkgConfig QUIET)
 pkg_check_modules(PC_BARESIP QUIET libbaresip)
 
-find_path(BARESIP_INCLUDE_DIR rem.h
-  HINTS ../rem/include ${PC_BARESIP_INCLUDEDIR} ${PC_BARESIP_INCLUDE_DIRS})
+find_path(BARESIP_INCLUDE_DIR baresip.h
+  HINTS ../baresip/include ${PC_BARESIP_INCLUDEDIR} ${PC_BARESIP_INCLUDE_DIRS})
 
 find_library(BARESIP_LIBRARY NAMES baresip libbaresip baresip-static
   HINTS ../baresip ../baresip/build ../baresip/build/Debug
