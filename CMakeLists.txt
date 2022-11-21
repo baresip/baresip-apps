@@ -22,6 +22,7 @@ include(GNUInstallDirs)
 include(CheckIncludeFile)
 find_package(RE REQUIRED)
 find_package(REM REQUIRED)
+find_package(BARESIP REQUIRED)
 
 ##############################################################################
 #
