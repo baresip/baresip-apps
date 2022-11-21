@@ -75,13 +75,15 @@ jobs:
         repo: https://github.com/baresip/baresip
         secret: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: make re/rem
+    - name: make re/rem/baresip
       run: |
-        for p in re rem; do cd $p && sudo PATH="$PATH" make install && cd - && sudo rm -Rf $p; done
-
-    - name: make baresip
-      run: |
-        cd baresip && sudo PATH="$PATH" make install && cd -; mv baresip ../baresip
+        for p in re rem baresip; do
+          cmake -S $p -B $p/build
+          cmake --build $p/build -j
+        done
+        for p in re rem baresip; do
+          mv $p ../.
+        done
 
     - name: ldconfig
       if: ${{ runner.os == 'Linux' }}
@@ -90,11 +92,9 @@ jobs:
     - name: make baresip-apps linux
       if: ${{ runner.os == 'Linux' }}
       run: |
-        make V=1 CCACHE= EXTRA_CFLAGS=-Werror appsinfo
-        make clean; make CCACHE=
+        cmake -B build -DCMAKE_C_FLAGS="-Werror" && cmake --build build -j
 
     - name: make baresip-apps macOS
       if: ${{ runner.os == 'macOS' }}
       run: |
-        make V=1 CCACHE= EXTRA_CFLAGS=-Werror appsinfo
-        make clean; make CCACHE=
+        cmake -B build -DCMAKE_C_FLAGS="-Werror" && cmake --build build -j
