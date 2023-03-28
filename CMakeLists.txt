@@ -87,13 +87,10 @@ add_definitions(${RE_DEFINITIONS})
 include_directories(
   include
   src
-  /usr/local/include
   ${RE_INCLUDE_DIRS}
   ${BARESIP_INCLUDE_DIRS}
   ${OPENSSL_INCLUDE_DIR}
 )
-
-link_directories(/usr/local/lib)
 
 if(MOD_PATH)
   add_definitions(-DMOD_PATH="${MOD_PATH}")
