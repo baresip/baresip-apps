@@ -21,7 +21,6 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 include(GNUInstallDirs)
 include(CheckIncludeFile)
 find_package(RE REQUIRED)
-find_package(REM REQUIRED)
 find_package(BARESIP REQUIRED)
 
 ##############################################################################
@@ -90,7 +89,6 @@ include_directories(
   src
   /usr/local/include
   ${RE_INCLUDE_DIRS}
-  ${REM_INCLUDE_DIRS}
   ${BARESIP_INCLUDE_DIRS}
   ${OPENSSL_INCLUDE_DIR}
 )
