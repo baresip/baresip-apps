@@ -10,6 +10,7 @@ set(MODULES
   intercom
   kaoptions
   vidloop
+  parcall
 )
 
 if(DEFINED EXTRA_MODULES)
