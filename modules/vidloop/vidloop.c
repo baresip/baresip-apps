@@ -250,9 +250,9 @@ static int display(struct video_loop *vl, struct vidframe *frame,
 static int packet_handler(bool marker, uint64_t rtp_ts,
 			  const uint8_t *hdr, size_t hdr_len,
 			  const uint8_t *pld, size_t pld_len,
-			  void *arg)
+			  const struct video *arg)
 {
-	struct video_loop *vl = arg;
+	struct video_loop *vl = (struct video_loop*)arg;
 	struct vidframe frame;
 	struct mbuf *mb;
 	uint64_t timestamp;
@@ -302,6 +302,18 @@ static int packet_handler(bool marker, uint64_t rtp_ts,
 	mem_deref(mb);
 
 	return 0;
+}
+
+
+static int packet_handler_h264(bool marker, uint64_t rtp_ts,
+			  const uint8_t *hdr, size_t hdr_len,
+			  const uint8_t *pld, size_t pld_len,
+			  void *arg)
+{
+	return packet_handler(marker, rtp_ts,
+			  hdr, hdr_len,
+			  pld, pld_len,
+			  arg);
 }
 
 
@@ -386,7 +398,7 @@ static void vidsrc_packet_handler(struct vidpacket *packet, void *arg)
 	}
 
 	h264_packetize(rtp_ts, packet->buf, packet->size,
-		       1480, packet_handler, vl);
+		       1480, packet_handler_h264, vl);
 }
 
 
@@ -559,7 +571,7 @@ static int enable_encoder(struct video_loop *vl, const char *name)
 	     vl->vc_enc->name, prm.fps, prm.bitrate);
 
 	err = vl->vc_enc->encupdh(&vl->enc, vl->vc_enc, &prm, NULL,
-				  packet_handler, vl);
+				  packet_handler, (struct video *)vl);
 	if (err) {
 		warning("vidloop: update encoder failed: %m\n", err);
 		return err;
@@ -583,7 +595,7 @@ static int enable_decoder(struct video_loop *vl, const char *name)
 	info("vidloop: enabled decoder %s\n", vl->vc_dec->name);
 
 	if (vl->vc_dec->decupdh) {
-		err = vl->vc_dec->decupdh(&vl->dec, vl->vc_dec, NULL);
+		err = vl->vc_dec->decupdh(&vl->dec, vl->vc_dec, NULL, NULL);
 		if (err) {
 			warning("vidloop: update decoder failed: %m\n", err);
 			return err;
