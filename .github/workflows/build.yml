@@ -77,25 +77,17 @@ jobs:
 
     - uses: sreimers/pr-dependency-action@v0.3
       with:
-        name: rem
-        repo: https://github.com/baresip/rem
-        secret: ${{ secrets.GITHUB_TOKEN }}
-
-    - uses: sreimers/pr-dependency-action@v0.3
-      with:
         name: baresip
         repo: https://github.com/baresip/baresip
         secret: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: make re/rem/baresip
+    - name: make re/baresip
       run: |
-        for p in re rem; do
-          cmake -S $p -B $p/build
-          cmake --build $p/build -j
-        done
+        cmake -S re -B re/build
+        cmake --build re/build -j
         cmake -S baresip -B baresip/build -DMODULES=
         cmake --build baresip/build -j -t baresip
-        for p in re rem baresip; do
+        for p in re baresip; do
           mv $p ../.
         done
 
