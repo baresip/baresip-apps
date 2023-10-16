@@ -69,13 +69,13 @@ jobs:
                         glib-utils
 
 
-    - uses: sreimers/pr-dependency-action@v0.3
+    - uses: sreimers/pr-dependency-action@v0.6
       with:
         name: re
         repo: https://github.com/baresip/re
         secret: ${{ secrets.GITHUB_TOKEN }}
 
-    - uses: sreimers/pr-dependency-action@v0.3
+    - uses: sreimers/pr-dependency-action@v0.6
       with:
         name: baresip
         repo: https://github.com/baresip/baresip
