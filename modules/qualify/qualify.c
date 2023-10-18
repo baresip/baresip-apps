@@ -18,33 +18,28 @@
  * reachable.
  *
  * Configure in address parameter `extra`:
- * qual_freq     [seconds]    qualify frequency
+ * qual_int      [seconds]    qualify interval
  * qual_to       [seconds]    qualify timeout
  *
  * The OPTIONS are only sent if both options are present, both are not zero,
- * qualify_freq is greater than qual_to, and the call is incoming. As soon as
+ * qual_int is greater than qual_to, and the call is incoming. As soon as
  * the call is established or closed, sending of OPTIONS is stopped.
  * If no response to an OPTIONS request is received within the specified
- * timeout, UA_EVENT_CUSTOM with "Peer offline" is triggered.
- * The sending of OPTIONS still continues and if a subsequent OPTIONS is
- * answered, UA_EVENT_CUSTOM with "Peer online" is triggered.
+ * timeout, UA_EVENT_MODULE with "peer offline" is triggered.
+ * In this case, the sending of OPTIONS still continues and if a subsequent
+ * OPTIONS is answered, UA_EVENT_MODULE with "peer online" is triggered.
  *
  * Example:
- * <sip:A@sip.example.com>;extra=qual_freq=5,qual_to=2
+ * <sip:A@sip.example.com>;extra=qual_int=5,qual_to=2
  *
  */
-
-
-#define DEBUG_MODULE "qualify"
-#define DEBUG_LEVEL 5
-#include <re_dbg.h>
 
 
 struct qualle {
 	struct le he;
 	struct call *call;
 	bool offline;
-	struct tmr freq_tmr;
+	struct tmr int_tmr;
 	struct tmr to_tmr;
 };
 
@@ -69,7 +64,7 @@ static void qualle_destructor(void *arg)
 
 	hash_unlink(&qualle->he);
 	tmr_cancel(&qualle->to_tmr);
-	tmr_cancel(&qualle->freq_tmr);
+	tmr_cancel(&qualle->int_tmr);
 }
 
 
@@ -120,8 +115,8 @@ static void options_resp_handler(int err, const struct sip_msg *msg, void *arg)
 
 	if (qualle->offline) {
 		qualle->offline = false;
-		ua_event(call_get_ua(qualle->call), UA_EVENT_CUSTOM,
-			 qualle->call, "Peer online");
+		module_event("qualify", "peer online",
+			     call_get_ua(qualle->call), qualle->call, "");
 	}
 }
 
@@ -135,15 +130,15 @@ static void to_handler(void *arg)
 
 	if (!qualle->offline) {
 		qualle->offline = true;
-		ua_event(call_get_ua(call), UA_EVENT_CUSTOM, call,
-			 "Peer offline");
+		module_event("qualify", "peer offline",
+			     call_get_ua(qualle->call), qualle->call, "");
 	}
 
-	info("No response recevied to OPTIONS in %u seconds.", qual_to);
+	info("No response received to OPTIONS in %u seconds.", qual_to);
 }
 
 
-static void freq_handler(void *arg)
+static void interval_handler(void *arg)
 {
 	struct qualle *qualle = arg;
 	(void)call_start_qualify(qualle->call, call_account(qualle->call),
@@ -151,12 +146,6 @@ static void freq_handler(void *arg)
 }
 
 
-/**
- * Returns -1 if qual_freq or qual_to are zero
- *	   -2 if qual_to is greater than or equal to qual_freq
- *	   0 on success
- *	   else error code
- */
 static int call_start_qualify(struct call *call,
 			      const struct account *acc,
 			      struct qualle *qualle)
@@ -165,21 +154,21 @@ static int call_start_qualify(struct call *call,
 	struct sa peer_addr;
 	char peer_uri[128];
 	uint32_t qual_to = 0;
-	uint32_t qual_freq = 0;
+	uint32_t qual_int = 0;
 	int newle = qualle == NULL;
 
-	account_extra_uint(acc, "qual_freq", &qual_freq);
+	account_extra_uint(acc, "qual_int", &qual_int);
 	account_extra_uint(acc, "qual_to", &qual_to);
 
-	if (!call || !qual_freq || !qual_to) {
-		return -1;
+	if (!call || !qual_int || !qual_to) {
+		return EINVAL;
 	}
 
-	if (qual_to >= qual_freq) {
+	if (qual_to >= qual_int) {
 		warning("Will not send OPTIONS because qualify timeout is "
-			"greater than or equal to qualify frequency.\n"
-			"qual_to: %u, qual_freq: %u\n", qual_to, qual_freq);
-		return -2;
+			"greater than or equal to qualify interval.\n"
+			"qual_to: %u, qual_int: %u\n", qual_to, qual_int);
+		return EINVAL;
 	}
 
 	if (newle) {
@@ -189,7 +178,7 @@ static int call_start_qualify(struct call *call,
 
 		qualle->call = call;
 		tmr_init(&qualle->to_tmr);
-		tmr_init(&qualle->freq_tmr);
+		tmr_init(&qualle->int_tmr);
 		hash_append(q.qual_map, hash_fast_str(account_aor(acc)),
 			    &qualle->he, qualle);
 	}
@@ -198,10 +187,10 @@ static int call_start_qualify(struct call *call,
 	err = re_snprintf(peer_uri, sizeof(peer_uri), "sip:%H:%d",
 		   sa_print_addr, &peer_addr, sa_port(&peer_addr));
 
-	if (err == -1 || err == 0) {
-		warning("Failed to get peer URI for sending OPTIONS ping. "
-			"Trying again in %u seconds.\n", err, qual_freq);
-		tmr_start(&qualle->freq_tmr, qual_freq * 1000, freq_handler,
+	if (err <= 0) {
+		warning("Failed to get peer URI for sending OPTIONS ping (%m)."
+			" Trying again in %u seconds.\n", err, qual_int);
+		tmr_start(&qualle->int_tmr, qual_int * 1000, interval_handler,
 			  qualle);
 		return err;
 	}
@@ -209,15 +198,15 @@ static int call_start_qualify(struct call *call,
 	err = ua_options_send(call_get_ua(call), peer_uri,
 			      options_resp_handler, qualle);
 	if (err) {
-		warning("Sending OPTIONS failed with err %d. "
-			"Trying again in %u seconds.\n", err, qual_freq);
-		tmr_start(&qualle->freq_tmr, qual_freq * 1000, freq_handler,
+		warning("Sending OPTIONS failed with err (%m). "
+			"Trying again in %u seconds.\n", err, qual_int);
+		tmr_start(&qualle->int_tmr, qual_int * 1000, interval_handler,
 			  qualle);
 		return err;
 	}
 
 	tmr_start(&qualle->to_tmr, qual_to * 1000, to_handler, qualle);
-	tmr_start(&qualle->freq_tmr, qual_freq * 1000, freq_handler, qualle);
+	tmr_start(&qualle->int_tmr, qual_int * 1000, interval_handler, qualle);
 
 	return 0;
 }
@@ -268,9 +257,6 @@ static void ua_event_handler(struct ua *ua, enum ua_event ev,
 			break;
 		case UA_EVENT_CALL_CLOSED:
 			call_stop_qualify(acc);
-			break;
-		case UA_EVENT_CUSTOM:
-			warning("UA_EVENT_CUSTOM. prm: %s\n", prm);
 			break;
 		default:
 			break;
