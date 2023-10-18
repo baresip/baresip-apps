@@ -19,18 +19,18 @@
  *
  * Configure in address parameter `extra`:
  * qual_freq     [seconds]    qualify frequency
- * qual_to       [ms]         qualify timeout
+ * qual_to       [seconds]    qualify timeout
  *
  * The OPTIONS are only sent if both options are present, both are not zero,
  * qualify_freq is greater than qual_to, and the call is incoming. As soon as
  * the call is established or closed, sending of OPTIONS is stopped.
  * If no response to an OPTIONS request is received within the specified
- * qual_to, UA_EVENT_CUSTOM with "Peer offline" is triggered.
+ * timeout, UA_EVENT_CUSTOM with "Peer offline" is triggered.
  * The sending of OPTIONS still continues and if a subsequent OPTIONS is
- * ansewred, UA_EVENT_CUSTOM with "Peer online" is triggered.
+ * answered, UA_EVENT_CUSTOM with "Peer online" is triggered.
  *
  * Example:
- * <sip:A@sip.example.com>;extra=qual_freq=5,qual_to=2000
+ * <sip:A@sip.example.com>;extra=qual_freq=5,qual_to=2
  *
  */
 
@@ -139,7 +139,7 @@ static void to_handler(void *arg)
 			 "Peer offline");
 	}
 
-	info("No response recevied to OPTIONS in %u ms.", qual_to);
+	info("No response recevied to OPTIONS in %u seconds.", qual_to);
 }
 
 
@@ -175,7 +175,7 @@ static int call_start_qualify(struct call *call,
 		return -1;
 	}
 
-	if ((qual_to / 1000) >= qual_freq) {
+	if (qual_to >= qual_freq) {
 		warning("Will not send OPTIONS because qualify timeout is "
 			"greater than or equal to qualify frequency.\n"
 			"qual_to: %u, qual_freq: %u\n", qual_to, qual_freq);
@@ -216,7 +216,7 @@ static int call_start_qualify(struct call *call,
 		return err;
 	}
 
-	tmr_start(&qualle->to_tmr, qual_to, to_handler, qualle);
+	tmr_start(&qualle->to_tmr, qual_to * 1000, to_handler, qualle);
 	tmr_start(&qualle->freq_tmr, qual_freq * 1000, freq_handler, qualle);
 
 	return 0;
