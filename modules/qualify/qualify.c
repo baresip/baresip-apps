@@ -15,22 +15,19 @@
  *
  * This module implements a pinging mechanism using SIP OPTIONS to qualify the
  * peer while a call is in the INCOMING state to ensure that the peer is
- * reachable and we will be able to successfully answer the call.
+ * reachable.
  *
- * Configuration:
+ * Configure in address parameter `extra`:
  * qual_freq     [seconds]    qualify frequency
  * qual_to       [ms]         qualify timeout
  *
  * The OPTIONS are only sent if both options are present, both are not zero,
  * qualify_freq is greater than qual_to, and the call is incoming. As soon as
- * the call is established or closed, we stop sending OPTIONS.
- * If we run don’t receive a response to an OPTIONS request within the
- * specified qual_to, the call is terminated and UA_EVENT_CALL_CLOSED is
- * triggered.
- *
- * Extra account address parameters:
- * The module can be activated by adding both the `qual_freq` and the `qual_to`
- * parameters to the accounts parameter `extra`.
+ * the call is established or closed, sending of OPTIONS is stopped.
+ * If no response to an OPTIONS request is received within the specified
+ * qual_to, UA_EVENT_CUSTOM with "Peer offline" is triggered.
+ * The sending of OPTIONS still continues and if a subsequent OPTIONS is
+ * ansewred, UA_EVENT_CUSTOM with "Peer online" is triggered.
  *
  * Example:
  * <sip:A@sip.example.com>;extra=qual_freq=5,qual_to=2000
@@ -46,6 +43,7 @@
 struct qualle {
 	struct le he;
 	struct call *call;
+	bool offline;
 	struct tmr freq_tmr;
 	struct tmr to_tmr;
 };
@@ -119,6 +117,12 @@ static void options_resp_handler(int err, const struct sip_msg *msg, void *arg)
 	}
 
 	tmr_cancel(&qualle->to_tmr);
+
+	if (qualle->offline) {
+		qualle->offline = false;
+		ua_event(call_get_ua(qualle->call), UA_EVENT_CUSTOM,
+			 qualle->call, "Peer online");
+	}
 }
 
 
@@ -127,14 +131,15 @@ static void to_handler(void *arg)
 	struct qualle *qualle = arg;
 	struct call *call = qualle->call;
 	uint32_t qual_to = 0;
-	conf_get_u32(conf_cur(), "qual_to", &qual_to);
+	account_extra_uint(call_account(call), "qual_to", &qual_to);
 
-	tmr_cancel(&qualle->freq_tmr);
+	if (!qualle->offline) {
+		qualle->offline = true;
+		ua_event(call_get_ua(call), UA_EVENT_CUSTOM, call,
+			 "Peer offline");
+	}
 
-	call_hangup(call, 408, "No response to OPTIONS received");
-
-	ua_event(call_get_ua(call), UA_EVENT_CALL_CLOSED, call,
-		 "No response recevied to OPTIONS in %u ms.", qual_to);
+	info("No response recevied to OPTIONS in %u ms.", qual_to);
 }
 
 
@@ -254,6 +259,7 @@ static void ua_event_handler(struct ua *ua, enum ua_event ev,
 		case UA_EVENT_CALL_INCOMING:
 			(void)call_start_qualify(call, acc, NULL);
 			break;
+		case UA_EVENT_CALL_ESTABLISHED:
 		case UA_EVENT_CALL_ANSWERED:
 			if (call_is_outgoing(call))
 			    break;
@@ -262,6 +268,9 @@ static void ua_event_handler(struct ua *ua, enum ua_event ev,
 			break;
 		case UA_EVENT_CALL_CLOSED:
 			call_stop_qualify(acc);
+			break;
+		case UA_EVENT_CUSTOM:
+			warning("UA_EVENT_CUSTOM. prm: %s\n", prm);
 			break;
 		default:
 			break;
