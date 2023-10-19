@@ -25,9 +25,9 @@
  * qual_int is greater than qual_to, and the call is incoming. As soon as
  * the call is established or closed, sending of OPTIONS is stopped.
  * If no response to an OPTIONS request is received within the specified
- * timeout, UA_EVENT_MODULE with "peer offline" is triggered.
+ * timeout, a UA_EVENT_MODULE with "peer offline" is triggered.
  * In this case, the sending of OPTIONS still continues and if a subsequent
- * OPTIONS is answered, UA_EVENT_MODULE with "peer online" is triggered.
+ * OPTIONS is answered, a UA_EVENT_MODULE with "peer online" is triggered.
  *
  * Example:
  * <sip:A@sip.example.com>;extra=qual_int=5,qual_to=2
@@ -107,7 +107,7 @@ static void options_resp_handler(int err, const struct sip_msg *msg, void *arg)
 	struct qualle *qualle = arg;
 
 	if (err) {
-		warning("OPTIONS reply error: %m\n", err);
+		warning("qualify: OPTIONS reply error (%m)\n", err);
 		return;
 	}
 
@@ -134,7 +134,8 @@ static void to_handler(void *arg)
 			     call_get_ua(qualle->call), qualle->call, "");
 	}
 
-	info("No response received to OPTIONS in %u seconds.", qual_to);
+	debug("qualify: no response received to OPTIONS in %u seconds",
+	      qual_to);
 }
 
 
@@ -165,9 +166,8 @@ static int call_start_qualify(struct call *call,
 	}
 
 	if (qual_to >= qual_int) {
-		warning("Will not send OPTIONS because qualify timeout is "
-			"greater than or equal to qualify interval.\n"
-			"qual_to: %u, qual_int: %u\n", qual_to, qual_int);
+		warning("qualify: timeout >= interval (%u >= %u)\n",
+			qual_to, qual_int);
 		return EINVAL;
 	}
 
@@ -188,8 +188,8 @@ static int call_start_qualify(struct call *call,
 		   sa_print_addr, &peer_addr, sa_port(&peer_addr));
 
 	if (err <= 0) {
-		warning("Failed to get peer URI for sending OPTIONS ping (%m)."
-			" Trying again in %u seconds.\n", err, qual_int);
+		warning("qualify: failed to get peer URI for %s (%m)\n",
+			call_peeruri(call), err);
 		tmr_start(&qualle->int_tmr, qual_int * 1000, interval_handler,
 			  qualle);
 		return err;
@@ -198,8 +198,7 @@ static int call_start_qualify(struct call *call,
 	err = ua_options_send(call_get_ua(call), peer_uri,
 			      options_resp_handler, qualle);
 	if (err) {
-		warning("Sending OPTIONS failed with err (%m). "
-			"Trying again in %u seconds.\n", err, qual_int);
+		warning("qualify: sending OPTIONS failed (%m)\n", err);
 		tmr_start(&qualle->int_tmr, qual_int * 1000, interval_handler,
 			  qualle);
 		return err;
