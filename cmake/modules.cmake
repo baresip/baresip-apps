@@ -11,6 +11,7 @@ set(MODULES
   kaoptions
   vidloop
   parcall
+  qualify
 )
 
 if(DEFINED EXTRA_MODULES)
