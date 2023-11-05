@@ -11,7 +11,6 @@
 #include <rem.h>
 #include <baresip.h>
 #include <fvad.h>
-#include "fvad.h"
 
 
 /**
@@ -133,7 +132,6 @@ static int encode_update(struct aufilt_enc_st **stp, void **ctx,
 	}
 
 	*stp = (struct aufilt_enc_st *)st;
-
 	return 0;
 }
 
@@ -188,7 +186,6 @@ static int decode_update(struct aufilt_dec_st **stp, void **ctx,
 	}
 
 	*stp = (struct aufilt_dec_st *)st;
-
 	return 0;
 }
 
@@ -217,7 +214,7 @@ static bool auframe_vad(Fvad *fvad, struct auframe *af)
 		while (af->sampc - pos >= sampc) {
 
 			int err = fvad_process(fvad, (int16_t*)af->sampv + pos,
-				sampc);
+					       sampc);
 			pos += sampc;
 			if (err > 0) {
 				return true;
@@ -253,9 +250,8 @@ static int encode(struct aufilt_enc_st *st, struct auframe *af)
 		vad->vad_tx = vad_tx;
 
 		debug("vfad: vad_tx: %s\n", desc);
-
 		module_event("fvad", "vad_tx", call_get_ua(vad->call),
-					 vad->call, desc);
+			     vad->call, desc);
 	}
 
 	return 0;
@@ -277,7 +273,7 @@ static int decode(struct aufilt_dec_st *st, struct auframe *af)
 
 		debug("vfad: vad_rx: %s\n", desc);
 		module_event("fvad", "vad_rx", call_get_ua(vad->call),
-					 vad->call, desc);
+			     vad->call, desc);
 	}
 
 	return 0;
