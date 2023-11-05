@@ -3,6 +3,8 @@ if(DEFINED MODULES)
   return()
 endif()
 
+find_package(FVAD)
+
 set(MODULES
   auloop
   autotest
@@ -13,6 +15,10 @@ set(MODULES
   parcall
   qualify
 )
+
+if(FVAD_FOUND)
+  list(APPEND MODULES fvad)
+endif()
 
 if(DEFINED EXTRA_MODULES)
   list(APPEND MODULES ${EXTRA_MODULES})
