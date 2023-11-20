@@ -179,7 +179,7 @@ static int call_start_qualify(struct call *call,
 		qualle->call = call;
 		tmr_init(&qualle->to_tmr);
 		tmr_init(&qualle->int_tmr);
-		hash_append(q.qual_map, hash_fast_str(account_aor(acc)),
+		hash_append(q.qual_map, hash_fast_str(call_id(call)),
 			    &qualle->he, qualle);
 	}
 
@@ -220,11 +220,15 @@ static bool qualle_get_applyh(struct le *le, void *arg)
 }
 
 
-static void call_stop_qualify(struct account *acc)
+static void call_stop_qualify(struct call *call)
 {
 	struct qualle *qualle;
+
+	if (!call)
+		return;
+
 	struct le *le = hash_lookup(q.qual_map,
-				    hash_fast_str(account_aor(acc)),
+				    hash_fast_str(call_id(call)),
 				    qualle_get_applyh, NULL);
 
 	if (!le || !le->data)
@@ -252,10 +256,10 @@ static void ua_event_handler(struct ua *ua, enum ua_event ev,
 			if (call_is_outgoing(call))
 			    break;
 
-			call_stop_qualify(acc);
+			call_stop_qualify(call);
 			break;
 		case UA_EVENT_CALL_CLOSED:
-			call_stop_qualify(acc);
+			call_stop_qualify(call);
 			break;
 		default:
 			break;
