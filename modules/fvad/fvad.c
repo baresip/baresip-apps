@@ -81,6 +81,55 @@ static bool find_call(const struct call *call, void *arg)
 	return call_audio(call) == fa->audio;
 }
 
+static int check_fvad_params(const struct aufilt_prm *prm)
+{
+	if (!prm)
+		return EINVAL;
+
+	if (prm->ch != 1) {
+		warning("fvad: only mono is supported\n");
+		return EINVAL;
+	}
+
+	if (prm->fmt != AUFMT_S16LE) {
+		warning("fvad: only AUFMT_S16LE is supported. "
+			"Use the auconv module to fix this\n");
+		return EINVAL;
+	}
+
+	return 0;
+}
+
+static int init_fvad(Fvad **fvad, const struct aufilt_prm *prm)
+{
+	struct conf *conf = conf_cur();
+
+	if (!fvad || !prm)
+		return EINVAL;
+
+	*fvad = fvad_new();
+	if (!*fvad) {
+		return ENOMEM;
+	}
+
+	int err = fvad_set_sample_rate(*fvad, prm->srate);
+	if (err < 0) {
+		warning("fvad: sample rate %d is not supported\n",
+			prm->srate);
+		return EINVAL;
+	}
+
+	uint32_t mode = 0;
+	conf_get_u32(conf, "fvad_mode", &mode);
+	err = fvad_set_mode(*fvad, mode);
+	if (err < 0) {
+		warning("fvad: mode %d is not supported\n",
+			mode);
+		return EINVAL;
+	}
+
+	return 0;
+}
 
 static int encode_update(struct aufilt_enc_st **stp, void **ctx,
 			 const struct aufilt *af, struct aufilt_prm *prm,
@@ -95,33 +144,18 @@ static int encode_update(struct aufilt_enc_st **stp, void **ctx,
 	if (*stp)
 		return 0;
 
-	if (prm->ch != 1) {
-		warning("fvad: only mono is supported\n");
-		return EINVAL;
-	}
-
-	if (prm->fmt != AUFMT_S16LE) {
-		warning("fvad: only AUFMT_S16LE is supported. "
-			"Use the auconv module to fix this\n");
-		return EINVAL;
-	}
+	int err = check_fvad_params(prm);
+	if (err)
+		return err;
 
 	st = mem_zalloc(sizeof(*st), enc_destructor);
 	if (!st)
 		return ENOMEM;
 
-	st->fvad = fvad_new();
-	if (!st->fvad) {
+	err = init_fvad(&st->fvad, prm);
+	if (err) {
 		mem_deref(st);
-		return ENOMEM;
-	}
-
-	int err = fvad_set_sample_rate(st->fvad, prm->srate);
-	if (err < 0) {
-		warning("fvad: sample rate %d is not supported\n",
-			prm->srate);
-		mem_deref(st);
-		return EINVAL;
+		return err;
 	}
 
 	if (!st->call) {
@@ -149,33 +183,18 @@ static int decode_update(struct aufilt_dec_st **stp, void **ctx,
 	if (*stp)
 		return 0;
 
-	if (prm->ch != 1) {
-		warning("fvad: only mono is supported\n");
-		return EINVAL;
-	}
-
-	if (prm->fmt != AUFMT_S16LE) {
-		warning("fvad: only AUFMT_S16LE is supported. "
-			"Use the auconv module to fix this\n");
-		return EINVAL;
-	}
+	int err = check_fvad_params(prm);
+	if (err)
+		return err;
 
 	st = mem_zalloc(sizeof(*st), dec_destructor);
 	if (!st)
 		return ENOMEM;
 
-	st->fvad = fvad_new();
-	if (!st->fvad) {
+	err = init_fvad(&st->fvad, prm);
+	if (err) {
 		mem_deref(st);
-		return ENOMEM;
-	}
-
-	int err = fvad_set_sample_rate(st->fvad, prm->srate);
-	if (err < 0) {
-		warning("fvad: sample rate %d is not supported\n",
-			prm->srate);
-		mem_deref(st);
-		return EINVAL;
+		return err;
 	}
 
 	if (!st->call) {
