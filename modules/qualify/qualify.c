@@ -108,16 +108,19 @@ static void options_resp_handler(int err, const struct sip_msg *msg, void *arg)
 
 	if (err) {
 		warning("qualify: OPTIONS reply error (%m)\n", err);
+		mem_deref(qualle);
 		return;
 	}
 
 	tmr_cancel(&qualle->to_tmr);
 
-	if (qualle->offline) {
+	if (qualle->offline && qualle->call) {
 		qualle->offline = false;
 		module_event("qualify", "peer online",
 			     call_get_ua(qualle->call), qualle->call, "");
 	}
+
+	mem_deref(qualle);
 }
 
 
@@ -196,8 +199,9 @@ static int call_start_qualify(struct call *call,
 	}
 
 	err = ua_options_send(call_get_ua(call), peer_uri,
-			      options_resp_handler, qualle);
+			      options_resp_handler, mem_ref(qualle));
 	if (err) {
+		mem_deref(qualle);
 		warning("qualify: sending OPTIONS failed (%m)\n", err);
 		tmr_start(&qualle->int_tmr, qual_int * 1000, interval_handler,
 			  qualle);
@@ -220,7 +224,7 @@ static bool qualle_get_applyh(struct le *le, void *arg)
 }
 
 
-static void call_stop_qualify(struct call *call)
+static void call_stop_qualify(struct call *call, bool closed)
 {
 	struct qualle *qualle;
 
@@ -235,6 +239,10 @@ static void call_stop_qualify(struct call *call)
 		return;
 
 	qualle = le->data;
+
+	if (closed)
+		qualle->call = NULL;
+
 	mem_deref(qualle);
 }
 
@@ -256,10 +264,10 @@ static void ua_event_handler(struct ua *ua, enum ua_event ev,
 			if (call_is_outgoing(call))
 			    break;
 
-			call_stop_qualify(call);
+			call_stop_qualify(call, false);
 			break;
 		case UA_EVENT_CALL_CLOSED:
-			call_stop_qualify(call);
+			call_stop_qualify(call, true);
 			break;
 		default:
 			break;
