@@ -189,11 +189,8 @@ static int call_start_qualify(struct call *call,
 	(void)call_msg_src(call, &peer_addr);
 
 	err = re_snprintf(peer_uri, sizeof(peer_uri),
-			  "sip:%s%j%s:%d",
-			  sa_af(&peer_addr) == AF_INET6 ? "[" : "",
-			  &peer_addr,
-			  sa_af(&peer_addr) == AF_INET6 ? "]" : "",
-			  sa_port(&peer_addr));
+			  "sip:%J%s", &peer_addr,
+			  sip_transp_param(call_transp(call)));
 
 	if (err <= 0) {
 		warning("qualify: failed to get peer URI for %s (%m)\n",
