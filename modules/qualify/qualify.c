@@ -107,7 +107,7 @@ static void options_resp_handler(int err, const struct sip_msg *msg, void *arg)
 	struct qualle *qualle = arg;
 
 	if (err) {
-		warning("qualify: OPTIONS reply error (%m)\n", err);
+		info("qualify: OPTIONS reply error (%m)\n", err);
 		mem_deref(qualle);
 		return;
 	}
@@ -226,26 +226,26 @@ static bool qualle_get_applyh(struct le *le, void *arg)
 }
 
 
-static void call_stop_qualify(struct call *call, bool closed)
+static struct qualle *call_get_qualle(const struct call *call)
 {
-	struct qualle *qualle;
-
 	if (!call)
-		return;
+		return NULL;
 
 	struct le *le = hash_lookup(q.qual_map,
 				    hash_fast_str(call_id(call)),
 				    qualle_get_applyh, NULL);
 
-	if (!le || !le->data)
+	return le ? le->data : NULL;
+}
+
+
+static void qualle_stop_tmrs(struct qualle *qualle)
+{
+	if (!qualle)
 		return;
 
-	qualle = le->data;
-
-	if (closed)
-		qualle->call = NULL;
-
-	mem_deref(qualle);
+	tmr_cancel(&qualle->to_tmr);
+	tmr_cancel(&qualle->int_tmr);
 }
 
 
@@ -253,6 +253,7 @@ static void ua_event_handler(struct ua *ua, enum ua_event ev,
 			     struct call *call, const char *prm, void *arg)
 {
 	struct account *acc = ua_account(ua);
+	struct qualle *qualle;
 	(void) call;
 	(void) prm;
 	(void) arg;
@@ -261,15 +262,24 @@ static void ua_event_handler(struct ua *ua, enum ua_event ev,
 		case UA_EVENT_CALL_INCOMING:
 			(void)call_start_qualify(call, acc, NULL);
 			break;
+
 		case UA_EVENT_CALL_ESTABLISHED:
-		case UA_EVENT_CALL_ANSWERED:
 			if (call_is_outgoing(call))
 			    break;
 
-			call_stop_qualify(call, false);
+			qualle = call_get_qualle(call);
+			qualle_stop_tmrs(qualle);
 			break;
+
 		case UA_EVENT_CALL_CLOSED:
-			call_stop_qualify(call, true);
+			qualle = call_get_qualle(call);
+			qualle_stop_tmrs(qualle);
+
+			if (qualle) {
+				qualle->call = NULL;
+				mem_deref(qualle);
+			}
+
 			break;
 		default:
 			break;
