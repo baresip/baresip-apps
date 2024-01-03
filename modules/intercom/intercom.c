@@ -352,7 +352,7 @@ static int module_init(void)
 	if (err)
 		return err;
 
-	err = cmd_register(baresip_commands(), cmdv, ARRAY_SIZE(cmdv));
+	err = cmd_register(baresip_commands(), cmdv, RE_ARRAY_SIZE(cmdv));
 	(void)conf_get(conf_cur(), "sip_autoanswer_method", &met);
 	if (!pl_strcmp(&met, "call-info"))
 		st.met = ANSM_CALLINFO;

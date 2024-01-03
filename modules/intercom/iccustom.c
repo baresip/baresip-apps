@@ -159,7 +159,7 @@ struct pl *iccustom_aufile(const struct pl *val)
 
 int iccustom_init(void)
 {
-	return cmd_register(baresip_commands(), cmdv, ARRAY_SIZE(cmdv));
+	return cmd_register(baresip_commands(), cmdv, RE_ARRAY_SIZE(cmdv));
 }
 
 
