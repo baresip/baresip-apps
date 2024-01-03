@@ -212,7 +212,7 @@ void call_hidden_close(struct call *call)
 
 int ichidden_init(void)
 {
-	return cmd_register(baresip_commands(), cmdv, ARRAY_SIZE(cmdv));
+	return cmd_register(baresip_commands(), cmdv, RE_ARRAY_SIZE(cmdv));
 }
 
 
