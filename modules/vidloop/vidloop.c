@@ -255,8 +255,6 @@ static int packet_handler(bool marker, uint64_t rtp_ts,
 	struct video_loop *vl = (struct video_loop*)arg;
 	struct vidframe frame;
 	struct mbuf *mb;
-	uint64_t timestamp;
-	bool keyframe;
 	int err = 0;
 
 	++vl->stats.enc_packets;
@@ -276,27 +274,27 @@ static int packet_handler(bool marker, uint64_t rtp_ts,
 
 	vl->stat.bytes += mbuf_get_left(mb);
 
+	struct rtp_header rtp_hdr = {.m = marker, .seq = vl->seq++};
+	struct viddec_packet pkt  = {.mb = mb, .hdr = &rtp_hdr};
+
+	/* convert the RTP timestamp to VIDEO_TIMEBASE timestamp */
+	pkt.timestamp = video_calc_timebase_timestamp(rtp_ts);
+
 	/* decode */
 	vidframe_clear(&frame);
 	if (vl->vc_dec && vl->dec) {
-		err = vl->vc_dec->dech(vl->dec, &frame, &keyframe,
-				       marker, vl->seq++, mb);
+		err = vl->vc_dec->dech(vl->dec, &frame, &pkt);
 		if (err) {
 			warning("vidloop: codec decode: %m\n", err);
 			goto out;
 		}
 
-		if (keyframe)
+		if (pkt.intra)
 			++vl->stat.n_keyframe;
 	}
 
-	/* convert the RTP timestamp to VIDEO_TIMEBASE timestamp */
-	timestamp = video_calc_timebase_timestamp(rtp_ts);
-
-	if (vidframe_isvalid(&frame)) {
-
-		display(vl, &frame, timestamp);
-	}
+	if (vidframe_isvalid(&frame))
+		display(vl, &frame, pkt.timestamp);
 
  out:
 	mem_deref(mb);
