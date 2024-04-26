@@ -14,6 +14,7 @@ set(MODULES
   vidloop
   parcall
   qualify
+  multicast
 )
 
 if(FVAD_FOUND)
