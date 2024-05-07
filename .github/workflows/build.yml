@@ -18,7 +18,7 @@ jobs:
       MACOSX_DEPLOYMENT_TARGET: "10.10"
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
     - name: openssl path macos
       if: ${{ runner.os == 'macOS' }}
@@ -69,13 +69,13 @@ jobs:
                         glib-utils
 
 
-    - uses: sreimers/pr-dependency-action@v0.6
+    - uses: sreimers/pr-dependency-action@v1
       with:
         name: re
         repo: https://github.com/baresip/re
         secret: ${{ secrets.GITHUB_TOKEN }}
 
-    - uses: sreimers/pr-dependency-action@v0.6
+    - uses: sreimers/pr-dependency-action@v1
       with:
         name: baresip
         repo: https://github.com/baresip/baresip
