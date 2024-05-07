@@ -1,0 +1,29 @@
+#
+# baresip configuration -- example for linux
+#
+
+#------------------------------------------------------------------------------
+
+#module_app		auloop.so
+#module_app		autotest.so
+#module_app		b2bua.so
+#module_app		fvad.so
+#module_app		intercom.so
+#module_app		kaoptions.so
+#module_app		multicast.so
+#module_app		parcall.so
+#module_app		qualify.so
+#module_app		vidloop.so
+
+
+#------------------------------------------------------------------------------
+# Module parameters
+
+# multicast receivers (in priority order)- port number must be even
+#multicast_call_prio	0
+#multicast_ttl		1
+#multicast_jbuf_type	fixed		# off, fixed, adaptive
+#multicast_jbuf_delay	5-10		# frames
+#multicast_fade_time	125		# fade in/out time in [ms]
+#multicast_listener	224.0.2.21:50000
+#multicast_listener	224.0.2.21:50002
