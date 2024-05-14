@@ -261,6 +261,7 @@ static void auplay_write_handler(struct auframe *af, void *arg)
 static int aufilt_setup(struct list *aufiltl)
 {
 	struct aufilt_prm prm;
+	struct config_audio *cfg = &conf_config()->audio;
 	struct le *le;
 	int err = 0;
 
@@ -270,8 +271,8 @@ static int aufilt_setup(struct list *aufiltl)
 	if (!list_isempty(&player->filterl))
 		return 0;
 
-	prm.srate = player->ac->srate;
-	prm.ch = player->ac->ch;
+	prm.srate = cfg->srate_play ? cfg->srate_play : player->ac->srate;
+	prm.ch = cfg->channels_play ? cfg->channels_play : player->ac->ch;
 	prm.fmt = player->dec_fmt;
 
 	for (le = list_head(aufiltl); le; le = le->next) {
@@ -360,7 +361,7 @@ int mcplayer_start(const struct aucodec *ac)
 		}
 	}
 
-	srate_dsp = player->ac->srate;
+	srate_dsp = cfg->srate_play ? cfg->srate_play : player->ac->srate;
 	channels_dsp = player->ac->ch;
 
 	prm.srate = srate_dsp;
