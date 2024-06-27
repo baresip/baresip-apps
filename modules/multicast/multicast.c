@@ -649,7 +649,7 @@ static int module_read_config(void)
 	err = conf_apply(conf_cur(), "multicast_listener",
 		module_read_config_handler, &prio);
 	if (err)
-		warning("Could not parse multicast config from file");
+		warning("Could not parse multicast config from file\n");
 
 	return err;
 }
