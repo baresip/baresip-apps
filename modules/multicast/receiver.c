@@ -855,7 +855,12 @@ int mcreceiver_alloc(struct sa *addr, uint8_t prio)
 		goto out;
 	}
 
-	if (IN_MULTICAST(sa_in(&mcreceiver->addr))) {
+	if (IN_MULTICAST(sa_in(&mcreceiver->addr))
+#ifdef HAVE_INET6
+	    || IN6_IS_ADDR_MULTICAST(&mcreceiver->addr.u.in6.sin6_addr)) {
+#else
+	    ) {
+#endif
 		err = udp_multicast_join((struct udp_sock *)
 			mcreceiver->rtp, &mcreceiver->addr);
 		if (err) {
