@@ -6,6 +6,10 @@
  * Copyright (C) 2021 Commend.com - c.huber@commend.com
  */
 
+#include <net/if.h>
+#undef LIST_INIT
+#undef LIST_FOREACH
+
 #include <re.h>
 #include <baresip.h>
 
@@ -20,12 +24,14 @@ struct mccfg {
 	uint32_t callprio;
 	uint32_t ttl;
 	uint32_t tfade;
+	char iface[128];
 };
 
 static struct mccfg mccfg = {
 	0,
 	1,
 	125,
+	""
 };
 
 
@@ -308,6 +314,24 @@ static int cmd_mcreg(struct re_printf *pf, void *arg)
 			err = EINVAL;
 		goto out;
 	}
+
+#ifdef HAVE_GETIFADDRS
+	if (str_isset(mccfg.iface)) {
+		unsigned int if_index;
+		if_index = if_nametoindex(mccfg.iface);
+		if (!if_index) {
+			warning("multicast: could not find interface %s\n",
+				&mccfg.iface);
+			if (sa_af(&addr) == AF_INET6) {
+				err = EINVAL;
+				goto out;
+			}
+		}
+		else {
+			sa_set_scopeid(&addr, if_index);
+		}
+	}
+#endif
 
 	err = mcreceiver_alloc(&addr, prio);
 
@@ -644,6 +668,9 @@ static int module_read_config(void)
 	(void)conf_get_u32(conf_cur(), "multicast_fade_time", &mccfg.tfade);
 	if (mccfg.tfade > 2000)
 		mccfg.tfade = 2000;
+
+	(void)conf_get_str(conf_cur(), "multicast_iface", mccfg.iface,
+			   sizeof(mccfg.iface));
 
 	sa_init(&laddr, AF_INET);
 	err = conf_apply(conf_cur(), "multicast_listener",
