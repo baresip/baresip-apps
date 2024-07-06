@@ -6,12 +6,12 @@
  * Copyright (C) 2021 Commend.com - c.huber@commend.com
  */
 
-#ifdef HAVE_GETIFADDRS
-#include <net/if.h>
-#endif
 #undef LIST_INIT
 #undef LIST_FOREACH
 
+#ifdef HAVE_GETIFADDRS
+#include <net/if.h>
+#endif
 #include <re.h>
 #include <baresip.h>
 
