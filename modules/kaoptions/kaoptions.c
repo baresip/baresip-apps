@@ -209,11 +209,9 @@ static int kaoptions_stop(struct ua *ua)
 }
 
 
-static void ua_event_handler(struct ua *ua, enum ua_event ev,
-	struct call *call, const char *prm, void *arg)
+static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 {
-	(void) call;
-	(void) prm;
+	struct ua *ua = bevent_get_ua(event);
 	(void) arg;
 
 	switch (ev) {
@@ -237,7 +235,7 @@ static int module_init(void)
 {
 	int err;
 
-	err = uag_event_register(ua_event_handler, NULL);
+	err = bevent_register(event_handler, NULL);
 
 	info("kaoptions: init\n");
 	return err;
@@ -246,7 +244,7 @@ static int module_init(void)
 
 static int module_close(void)
 {
-	uag_event_unregister(ua_event_handler);
+	bevent_unregister(event_handler);
 	list_flush(&kao.ka_ual);
 
 	return 0;
