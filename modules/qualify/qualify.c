@@ -249,13 +249,12 @@ static void qualle_stop_tmrs(struct qualle *qualle)
 }
 
 
-static void ua_event_handler(struct ua *ua, enum ua_event ev,
-			     struct call *call, const char *prm, void *arg)
+static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 {
+	struct ua   *ua   = bevent_get_ua(event);
+	struct call *call = bevent_get_call(event);
 	struct account *acc = ua_account(ua);
 	struct qualle *qualle;
-	(void) call;
-	(void) prm;
 	(void) arg;
 
 	switch (ev) {
@@ -293,7 +292,7 @@ static int module_init(void)
 
 	info("qualify: init\n");
 
-	err = uag_event_register(ua_event_handler, NULL);
+	err  = bevent_register(event_handler, NULL);
 	err |= hash_alloc(&q.qual_map, 32);
 
 	return err;
@@ -302,7 +301,7 @@ static int module_init(void)
 
 static int module_close(void)
 {
-	uag_event_unregister(ua_event_handler);
+	bevent_unregister(event_handler);
 	hash_flush(q.qual_map);
 	mem_deref(q.qual_map);
 
