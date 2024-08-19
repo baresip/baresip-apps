@@ -15,10 +15,9 @@
 
 static int reject_call(struct call *call, uint16_t scode, const char *reason)
 {
-	struct ua *ua = call_get_ua(call);
 	call_hangup(call, scode, reason);
 
-	ua_event(ua, UA_EVENT_CALL_CLOSED, call, reason);
+	bevent_call_emit(UA_EVENT_CALL_CLOSED, call, reason);
 	return mem_deref_later(call);
 }
 
@@ -310,13 +309,12 @@ static int established_handler(const struct pl *name,
 }
 
 
-void ua_event_handler(struct ua *ua, enum ua_event ev,
-			     struct call *call, const char *prm, void *arg)
+void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 {
 	const struct list *hdrs;
-	(void)prm;
+	struct ua   *ua   = bevent_get_ua(event);
+	struct call *call = bevent_get_call(event);
 	(void)arg;
-	(void)ua;
 
 	if (call) {
 		hdrs = call_get_custom_hdrs(call);

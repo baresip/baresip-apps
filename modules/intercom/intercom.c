@@ -360,7 +360,7 @@ static int module_init(void)
 		st.met = ANSM_ALERTINFO;
 
 	(void)conf_apply(conf_cur(), "iccustom", iccustom_handler, st.custom);
-	err |= uag_event_register(ua_event_handler, NULL);
+	err |= bevent_register(event_handler, NULL);
 	err |= uag_add_xhdr_intercom();
 	err |= iccustom_init();
 	err |= ichidden_init();
@@ -377,7 +377,7 @@ static int module_close(void)
 	mem_deref(st.custom);
 	mem_deref(st.ansval);
 	cmd_unregister(baresip_commands(), cmdv);
-	uag_event_unregister(ua_event_handler);
+	bevent_unregister(event_handler);
 	iccustom_close();
 	ichidden_close();
 
