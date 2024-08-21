@@ -93,14 +93,16 @@ static void dial(void *arg)
 }
 
 
-static void ua_event_handler(struct ua *ua, enum ua_event ev,
-			     struct call *call, const char *prm, void *arg)
+static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 {
+	struct ua   *ua   = bevent_get_ua(event);
+	struct call *call = bevent_get_call(event);
+	const char  *txt  = bevent_get_text(event);
 	struct account *acc = ua_account(ua);
 	(void) arg;
 
 	info("autotest: [ ua=%s call=%s ] event: %s (%s)\n",
-	      account_aor(acc), call_id(call), uag_event_str(ev), prm);
+	      account_aor(acc), call_id(call), uag_event_str(ev), txt);
 
 	switch (ev) {
 
@@ -287,7 +289,7 @@ static int module_init(void)
 	info("autotest: module init\n");
 
 	memset(&d, 0, sizeof(d));
-	err = uag_event_register(ua_event_handler, NULL);
+	err = bevent_register(event_handler, NULL);
 	if (err)
 		return err;
 
@@ -303,7 +305,7 @@ static int module_close(void)
 	tmr_cancel(&d.tmr_hangup);
 	tmr_cancel(&d.tmr_dial);
 	cmd_unregister(baresip_commands(), cmdv);
-	uag_event_unregister(ua_event_handler);
+	bevent_unregister(event_handler);
 	mem_deref(d.mbdial);
 	mem_deref(d.mbhangup);
 	return 0;

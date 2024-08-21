@@ -163,13 +163,11 @@ static bool parcall_debug(struct le *le, void *arg)
 }
 
 
-static void ua_event_handler(struct ua *ua, enum ua_event ev,
-			     struct call *call, const char *prm, void *arg)
+static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 {
 	struct le *le;
+	struct call *call = bevent_get_call(event);
 
-	(void)ua;
-	(void)prm;
 	(void)arg;
 
 	switch (ev) {
@@ -490,7 +488,7 @@ static int module_init(void)
 	if (err)
 		return err;
 
-	err  = uag_event_register(ua_event_handler, NULL);
+	err  = bevent_register(event_handler, NULL);
 	err |= cmd_register(baresip_commands(), cmdv, RE_ARRAY_SIZE(cmdv));
 	if (err)
 		return err;
@@ -502,7 +500,7 @@ static int module_init(void)
 
 static int module_close(void)
 {
-	uag_event_unregister(ua_event_handler);
+	bevent_unregister(event_handler);
 	cmd_unregister(baresip_commands(), cmdv);
 	hash_flush(d.pargroups);
 	hash_flush(d.parcalls);

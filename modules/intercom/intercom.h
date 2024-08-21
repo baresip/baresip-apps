@@ -5,8 +5,7 @@
  */
 
 
-void ua_event_handler(struct ua *ua, enum ua_event ev,
-		      struct call *call, const char *prm, void *arg);
+void event_handler(enum ua_event ev, struct bevent *event, void *arg);
 
 int mem_deref_later(void *arg);
 struct iccustom *iccustom_find(const struct pl *val);
