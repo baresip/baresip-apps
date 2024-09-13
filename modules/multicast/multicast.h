@@ -21,6 +21,7 @@ enum {
 uint8_t multicast_callprio(void);
 uint8_t multicast_ttl(void);
 uint32_t multicast_fade_time(void);
+void multicast_set_dnd(bool v);
 
 
 /* Sender */
