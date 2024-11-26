@@ -229,9 +229,19 @@ static int cmd_redir_rm(struct re_printf *pf, void *arg)
 }
 
 
+static int cmd_redir_debug(struct re_printf *pf, void *arg)
+{
+	(void) arg;
+	re_hprintf(pf, "redirect: current redirections\n");
+	list_apply(&d.redirs, true, redirect_debug, pf);
+	return 0;
+}
+
+
 static const struct cmd cmdv[] = {
 {"uaredirect_add", 0, CMD_PRM, "Adds call redirection to UA",   cmd_redir_add},
 {"uaredirect_clear", 0, CMD_PRM, "Removes redirection from UA", cmd_redir_rm },
+{"uaredirect_debug", 0, 0, "Prints redirect list", cmd_redir_debug },
 };
 
 
