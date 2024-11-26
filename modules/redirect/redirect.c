@@ -31,6 +31,7 @@ static void redirect_destructor(void *arg)
 {
 	struct redirect *r = arg;
 
+	tmr_cancel(&r->tmr);
 	mem_deref(r->reason);
 	mem_deref(r->contact);
 	mem_deref(r->params);
@@ -51,9 +52,13 @@ static bool redirect_debug(struct le *le, void *arg)
 	struct redirect *r = le->data;
 	struct re_printf *pf = arg;
 
-	(void)re_hprintf(pf, "%s %u %s expires in %lu [ms]\n",
+	(void)re_hprintf(pf, "%s %u %s expires in %lu [ms]",
 		  account_aor(ua_account(r->ua)), r->scode, r->reason,
 		  tmr_get_expire(&r->tmr));
+	if (str_isset(r->contact))
+		(void)re_hprintf(pf, " --> %s", r->contact);
+
+	(void)re_hprintf(pf, "\n");
 	return false;
 }
 
@@ -102,6 +107,8 @@ static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 				  expstr ? expstr : "",
 				  account_aor(ua_account(ua)),
 				  r->params);
+		mem_deref(expstr);
+		bevent_stop(event);
 	}
 
 	break;
@@ -116,7 +123,7 @@ static struct ua *carg_get_ua(const struct cmd_arg *carg)
 	struct pl pl;
 	int err;
 
-	err = re_regex(carg->prm, str_len(carg->prm), "[^ ]+ ", &pl);
+	err = re_regex(carg->prm, str_len(carg->prm), "[^ ]+", &pl);
 	if (err)
 		return NULL;
 
@@ -164,33 +171,35 @@ static int cmd_redir_add(struct re_printf *pf, void *arg)
 
 	struct pl pl;
 	struct pl v[6] = {PL_INIT,};
-	struct redirect *r = mem_zalloc(sizeof(*r), redirect_destructor);
+	struct redirect *r;
 	int err;
 
 	ua_redir_clear(ua);
+	r = mem_zalloc(sizeof(*r), redirect_destructor);
 	r->ua = ua;
+	tmr_init(&r->tmr);
 	pl_set_str(&pl, carg->prm);
 
-	if (!msg_param_decode(&pl, "scode",   &v[1]))
+	if (fmt_param_sep_get(&pl, "scode", ' ', &v[1]))
 		r->scode = pl_u32(&v[1]);
 	else
 		r->scode = 302;
 
-	if (!msg_param_decode(&pl, "reason",  &v[2]))
+	if (fmt_param_sep_get(&pl, "reason", ' ', &v[2]))
 		err = pl_strdup(&r->reason, &v[2]);
 	else
 		err = str_dup(&r->reason, "Moved Temporarily");
 
-	if (!msg_param_decode(&pl, "contact", &v[3]))
+	if (fmt_param_sep_get(&pl, "contact", ' ', &v[3]))
 		err = pl_strdup(&r->contact, &v[3]);
 
-	if (!msg_param_decode(&pl, "expires", &v[4])) {
+	if (fmt_param_sep_get(&pl, "expires", ' ', &v[4])) {
 		uint32_t expires = pl_u32(&v[4]);
 		if (expires)
 			tmr_start(&r->tmr, expires*1000, redirect_expired, r);
 	}
 
-	if (!msg_param_decode(&pl, "params",  &v[5]))
+	if (fmt_param_sep_get(&pl, "params", ' ', &v[5]))
 		err = pl_strdup(&r->params, &v[5]);
 
 	list_append(&d.redirs, &r->le, r);
