@@ -102,7 +102,8 @@ static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 		(void)sip_treplyf(NULL, NULL, uag_sip(), msg, false,
 				  r->scode, r->reason,
 				  "Contact: <%s>%s\r\n"
-				  "Diversion: <%s>%s",
+				  "Diversion: <%s>%s\r\n"
+				  "Content-Length: 0\r\n\r\n",
 				  r->contact,
 				  expstr ? expstr : "",
 				  account_aor(ua_account(ua)),
