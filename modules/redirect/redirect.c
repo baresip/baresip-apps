@@ -23,7 +23,16 @@ struct redirect {
 	char *reason;
 	struct tmr tmr;
 	char *contact;
-	char *params;
+	char *divparams;
+};
+
+struct redir_params {
+	struct pl scode;
+	struct pl reason;
+	uint32_t expires;
+
+	struct pl contact;
+	struct pl divparams;
 };
 
 
@@ -34,7 +43,7 @@ static void redirect_destructor(void *arg)
 	tmr_cancel(&r->tmr);
 	mem_deref(r->reason);
 	mem_deref(r->contact);
-	mem_deref(r->params);
+	mem_deref(r->divparams);
 }
 
 
@@ -72,6 +81,23 @@ static void redirect_expired(void *arg)
 }
 
 
+static int expires_alloc(char **bufp, uint32_t expires)
+{
+	char *buf;
+	int err;
+
+	if (expires)
+		err = re_sdprintf(&buf, ";expires=%u", expires);
+	else
+		err = re_sdprintf(&buf, "");
+
+	if (!err)
+		*bufp = buf;
+
+	return err;
+}
+
+
 static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 {
 	struct le *le;
@@ -88,14 +114,9 @@ static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 			break;
 
 		struct redirect *r = le->data;
-		uint64_t expires = tmr_get_expire(&r->tmr);
 		char *expstr = NULL;
-		int err = 0;
-		if (expires >= 1000) {
-			err = re_sdprintf(&expstr, ";expires=%u",
-					  expires / 1000);
-		}
-
+		int err = expires_alloc(&expstr,
+			  (uint32_t) tmr_get_expire(&r->tmr));
 		if (err)
 			return;
 
@@ -105,9 +126,9 @@ static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 				  "Diversion: <%s>%s\r\n"
 				  "Content-Length: 0\r\n\r\n",
 				  r->contact,
-				  expstr ? expstr : "",
+				  expstr,
 				  account_aor(ua_account(ua)),
-				  r->params);
+				  r->divparams);
 		mem_deref(expstr);
 		bevent_stop(event);
 	}
@@ -151,6 +172,23 @@ static void ua_redir_clear(struct ua *ua)
 }
 
 
+static void redirect_parse(struct redir_params *params,
+			  const struct cmd_arg *carg)
+{
+	struct pl pl = PL_INIT;
+	struct pl v = PL_INIT;
+	pl_set_str(&pl, carg->prm);
+
+	fmt_param_sep_get(&pl, "scode",   ' ', &params->scode);
+	fmt_param_sep_get(&pl, "reason",  ' ', &params->reason);
+	fmt_param_sep_get(&pl, "contact", ' ', &params->contact);
+	fmt_param_sep_get(&pl, "params",  ' ', &params->divparams);
+	fmt_param_sep_get(&pl, "expires", ' ', &v);
+	if (pl_isset(&v))
+		params->expires = pl_u32(&v);
+}
+
+
 static int cmd_redir_add(struct re_printf *pf, void *arg)
 {
 	const struct cmd_arg *carg = arg;
@@ -160,7 +198,7 @@ static int cmd_redir_add(struct re_printf *pf, void *arg)
 			    "[scode=<scode>] "
 			    "[reason=<reason>] "
 			    "[contact=<target contact>] "
-			    "[expires=<expires [s]>] "
+			    "[expires=<expires/s>] "
 			    "[params=<diversion params>]\n"
 			    "Default: scode=302 reason=\"Moved Temporarily\" "
 			    "contact=\"\" params=\"\"\n";
@@ -170,8 +208,6 @@ static int cmd_redir_add(struct re_printf *pf, void *arg)
 		return EINVAL;
 	}
 
-	struct pl pl;
-	struct pl v[6] = {PL_INIT,};
 	struct redirect *r;
 	int err;
 
@@ -179,29 +215,24 @@ static int cmd_redir_add(struct re_printf *pf, void *arg)
 	r = mem_zalloc(sizeof(*r), redirect_destructor);
 	r->ua = ua;
 	tmr_init(&r->tmr);
-	pl_set_str(&pl, carg->prm);
 
-	if (fmt_param_sep_get(&pl, "scode", ' ', &v[1]))
-		r->scode = pl_u32(&v[1]);
-	else
-		r->scode = 302;
+	struct redir_params params = { 0 };
+	redirect_parse(&params, carg);
+	r->scode = pl_isset(&params.scode) ? pl_u32(&params.scode) : 302;
 
-	if (fmt_param_sep_get(&pl, "reason", ' ', &v[2]))
-		err = pl_strdup(&r->reason, &v[2]);
+	if (pl_isset(&params.reason))
+		err = pl_strdup(&r->reason, &params.reason);
 	else
 		err = str_dup(&r->reason, "Moved Temporarily");
 
-	if (fmt_param_sep_get(&pl, "contact", ' ', &v[3]))
-		err = pl_strdup(&r->contact, &v[3]);
+	if (pl_isset(&params.contact))
+		err = pl_strdup(&r->contact, &params.contact);
 
-	if (fmt_param_sep_get(&pl, "expires", ' ', &v[4])) {
-		uint32_t expires = pl_u32(&v[4]);
-		if (expires)
-			tmr_start(&r->tmr, expires*1000, redirect_expired, r);
-	}
+	if (params.expires)
+		tmr_start(&r->tmr, params.expires*1000, redirect_expired, r);
 
-	if (fmt_param_sep_get(&pl, "params", ' ', &v[5]))
-		err = pl_strdup(&r->params, &v[5]);
+	if (pl_isset(&params.divparams))
+		err = pl_strdup(&r->divparams, &params.divparams);
 
 	list_append(&d.redirs, &r->le, r);
 	re_hprintf(pf, "redirect: added redirection\n");
@@ -238,10 +269,113 @@ static int cmd_redir_debug(struct re_printf *pf, void *arg)
 }
 
 
+static void find_first_incoming(struct call *call, void *arg)
+{
+	struct call **pcall = arg;
+
+	if (!pcall)
+		return;
+
+	if (call_state(call) != CALL_STATE_INCOMING)
+		return;
+
+	if (!*pcall)
+		*pcall = call;
+}
+
+
+static struct call *call_cur(void)
+{
+	struct call *call = NULL;
+	uag_filter_calls(find_first_incoming, NULL, &call);
+
+	return call;
+}
+
+
+static struct call *carg_get_call(const struct cmd_arg *carg)
+{
+	struct pl pl;
+	int err;
+
+	err = re_regex(carg->prm, str_len(carg->prm), "[^ ]+", &pl);
+	if (err)
+		return call_cur();
+
+	char *id;
+	pl_strdup(&id, &pl);
+	struct call *call = uag_call_find(id);
+	if (!call)
+		call = call_cur();
+
+	mem_deref(id);
+	return call;
+}
+
+
+static int cmd_call_redir(struct re_printf *pf, void *arg)
+{
+	const struct cmd_arg *carg = arg;
+	const char *usage = "usage: "
+			    "/callredirect <callid> "
+			    "[scode=<scode>] "
+			    "[reason=<reason>] "
+			    "[contact=<target contact>] "
+			    "[expires=<expires/s>] "
+			    "[params=<diversion params>]\n"
+			    "Default: scode=302 reason=\"Moved Temporarily\" "
+			    "contact=\"\" params=\"\"\n";
+
+	if (!str_cmp(carg->prm, "-h")) {
+		re_hprintf(pf, usage);
+		return EINVAL;
+	}
+
+	struct call *call = carg_get_call(carg);
+	if (!call) {
+		re_hprintf(pf, "redirect: could not find call\n");
+		return EINVAL;
+	}
+
+	struct ua *ua = call_get_ua(call);
+	struct redir_params params = { 0 };
+	redirect_parse(&params, carg);
+	uint16_t scode = pl_isset(&params.scode) ? pl_u32(&params.scode) : 302;
+	char *reason;
+	char *expstr = NULL;
+	int err;
+
+	if (pl_isset(&params.reason))
+		err = pl_strdup(&reason, &params.reason);
+	else
+		err = str_dup(&reason, "Moved Temporarily");
+
+	err = expires_alloc(&expstr, params.expires);
+	if (err)
+		return err;
+
+
+	re_hprintf(pf, "redirect: reject call %s\n", call_id(call));
+	ua_reject(ua, call, scode, reason,
+	      "Contact: <%r>%s\r\n"
+	      "Diversion: <%s>%r\r\n"
+	      "Content-Length: 0\r\n\r\n",
+	      &params.contact,
+	      expstr,
+	      account_aor(ua_account(ua)),
+	      &params.divparams);
+
+	mem_deref(reason);
+	mem_deref(expstr);
+	return 0;
+}
+
+
 static const struct cmd cmdv[] = {
 {"uaredirect_add", 0, CMD_PRM, "Adds call redirection to UA",   cmd_redir_add},
 {"uaredirect_clear", 0, CMD_PRM, "Removes redirection from UA", cmd_redir_rm },
 {"uaredirect_debug", 0, 0, "Prints redirect list", cmd_redir_debug },
+{"call_redirect", 0, CMD_PRM, "Redirects an incoming call", cmd_call_redir },
 };
 
 
