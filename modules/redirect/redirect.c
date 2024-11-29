@@ -354,15 +354,16 @@ static int cmd_call_redir(struct re_printf *pf, void *arg)
 	if (err)
 		return err;
 
-
 	re_hprintf(pf, "redirect: reject call %s\n", call_id(call));
-	ua_reject(ua, call, scode, reason,
+	struct pl *dp = &params.divparams;
+	ua_hangupf(ua, call, scode, reason,
 	      "Contact: <%r>%s\r\n"
-	      "Diversion: <%s>%r\r\n"
+	      "Diversion: <%s>%s%r\r\n"
 	      "Content-Length: 0\r\n\r\n",
 	      &params.contact,
 	      expstr,
 	      account_aor(ua_account(ua)),
+	      pl_isset(dp) && *(dp->p)!=';' ? ";" : "",
 	      &params.divparams);
 
 	mem_deref(reason);
