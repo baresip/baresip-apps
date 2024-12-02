@@ -15,6 +15,7 @@ set(MODULES
   parcall
   qualify
   multicast
+  redirect
 )
 
 if(FVAD_FOUND)
