@@ -9,12 +9,64 @@
 #include <rem.h>
 #include <baresip.h>
 
+/**
+ * @defgroup redirect module
+ *
+ * This module offers commands to set user absence information ("redirect") on
+ * UA basis that results in incoming call rejection with
+ * e.g. 302 Moved Temporarily.
+ * The user can specify:
+ * - status code
+ * - reason
+ * - Contact header
+ * - expires value in seconds after which the redirect is deleted
+ * - Diversion parameters
+ *
+ * The Diversion header is added and set automatically to the accounts's aor.
+ *
+ * config
+ * ------
+ *
+ * The redirect module MUST be loaded before module menu because it stops the
+ * UA_EVENT_SIPSESS_CONN event for an incoming SIP INVITE if a redirect is set
+ * by the user. Whereas module menu would accept the SIP INVITE.
+ *
+ * ```
+ * # Application Modules
+ * module_app		redirect.so
+ * ...
+ * module_app		menu.so
+ * ```
+ *
+ * Commands
+ * --------
+ * uaredirect_add <ua-idx> [scode=<scode>] [reason=<reason>]
+ *			   [contact=<target contact>] [expires=<expires/s>]
+ *			   [params=<diversion params>]
+ *			   Default: scode=302 reason="Moved Temporarily"
+ *				    contact="" params=""
+ *   Default:
+ *   scode=302, reason="Moved Temporarily", empty Contact header, no expiry,
+ *   no params for Diversion header.
+ *
+ * uaredirect_rm <ua-idx>
+ *
+ * uaredirect_debug
+ *
+ * callredirect [callid] [scode=<scode>] [reason=<reason>]
+ *			 [contact=<target contact>] [expires=<expires/s>]
+ *			 [params=<diversion params>]
+ *   Default:
+ *   Rejects fist incoming call, scode=302, reason="Moved Temporarily",
+ *   empty Contact header, no expiry, no params for Diversion header.
+ */
 
-/** Parallel call module data  */
+/** Redirect list set by user  */
 static struct {
 	struct list redirs;
 } d = { LIST_INIT };
 
+/** Redirection  */
 struct redirect {
 	struct le le;
 
@@ -26,6 +78,7 @@ struct redirect {
 	char *divparams;
 };
 
+/** Redirection command parsing structure  */
 struct redir_params {
 	struct pl scode;
 	struct pl reason;
@@ -193,15 +246,16 @@ static int cmd_redir_add(struct re_printf *pf, void *arg)
 {
 	const struct cmd_arg *carg = arg;
 	struct ua *ua = carg_get_ua(carg);
-	const char *usage = "usage: "
+	const char *usage = "usage: \n"
 			    "/uaredirect_add <ua-idx> "
 			    "[scode=<scode>] "
 			    "[reason=<reason>] "
 			    "[contact=<target contact>] "
 			    "[expires=<expires/s>] "
 			    "[params=<diversion params>]\n"
-			    "Default: scode=302 reason=\"Moved Temporarily\" "
-			    "contact=\"\" params=\"\"\n";
+			    "Default: scode=302, "
+			    "reason=\"Moved Temporarily\", "
+			    "no contact, no expiry, no params\n";
 
 	if (!ua) {
 		re_hprintf(pf, usage);
@@ -316,15 +370,19 @@ static struct call *carg_get_call(const struct cmd_arg *carg)
 static int cmd_call_redir(struct re_printf *pf, void *arg)
 {
 	const struct cmd_arg *carg = arg;
-	const char *usage = "usage: "
-			    "/callredirect <callid> "
+	const char *usage = "usage: \n"
+			    "Print usage\n"
+			    "/callredirect -h\n"
+			    "Redirect call\n"
+			    "/callredirect [callid] "
 			    "[scode=<scode>] "
 			    "[reason=<reason>] "
 			    "[contact=<target contact>] "
 			    "[expires=<expires/s>] "
 			    "[params=<diversion params>]\n"
-			    "Default: scode=302 reason=\"Moved Temporarily\" "
-			    "contact=\"\" params=\"\"\n";
+			    "Default: fist incoming call, scode=302, "
+			    "reason=\"Moved Temporarily\", "
+			    "no contact, no expiry, no params\n";
 
 	if (!str_cmp(carg->prm, "-h")) {
 		re_hprintf(pf, usage);
