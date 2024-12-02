@@ -50,3 +50,7 @@ tags
 
 # Generated files
 /build*
+
+# clangd
+.cache
+compile_commands.json
