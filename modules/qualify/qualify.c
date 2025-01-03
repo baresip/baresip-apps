@@ -53,9 +53,9 @@ static struct qualify q = { NULL };
 
 
 /* Forward declaration */
-static int call_start_qualify(struct call *call,
-			      const struct account *acc,
-			      struct qualle *qualle);
+static void call_start_qualify(struct call *call,
+			       const struct account *acc,
+			       struct qualle *qualle);
 
 
 static void qualle_destructor(void *arg)
@@ -145,16 +145,14 @@ static void to_handler(void *arg)
 static void interval_handler(void *arg)
 {
 	struct qualle *qualle = arg;
-	(void)call_start_qualify(qualle->call, call_account(qualle->call),
-				 qualle);
+	call_start_qualify(qualle->call, call_account(qualle->call), qualle);
 }
 
 
-static int call_start_qualify(struct call *call,
+static void call_start_qualify(struct call *call,
 			      const struct account *acc,
 			      struct qualle *qualle)
 {
-	int err;
 	struct sa peer_addr;
 	char peer_uri[128];
 	uint32_t qual_to = 0;
@@ -164,20 +162,19 @@ static int call_start_qualify(struct call *call,
 	account_extra_uint(acc, "qual_int", &qual_int);
 	account_extra_uint(acc, "qual_to", &qual_to);
 
-	if (!call || !qual_int || !qual_to) {
-		return EINVAL;
-	}
+	if (!call || !qual_int || !qual_to)
+		return;
 
 	if (qual_to >= qual_int) {
 		warning("qualify: timeout >= interval (%u >= %u)\n",
 			qual_to, qual_int);
-		return EINVAL;
+		return;
 	}
 
 	if (newle) {
 		qualle = mem_zalloc(sizeof(*qualle), qualle_destructor);
 		if (!qualle)
-			return ENOMEM;
+			return;
 
 		qualle->call = call;
 		tmr_init(&qualle->to_tmr);
@@ -188,32 +185,28 @@ static int call_start_qualify(struct call *call,
 
 	(void)call_msg_src(call, &peer_addr);
 
-	err = re_snprintf(peer_uri, sizeof(peer_uri),
+	int n = re_snprintf(peer_uri, sizeof(peer_uri),
 			  "sip:%J%s", &peer_addr,
 			  sip_transp_param(call_transp(call)));
 
-	if (err <= 0) {
-		warning("qualify: failed to get peer URI for %s (%m)\n",
-			call_peeruri(call), err);
-		tmr_start(&qualle->int_tmr, qual_int * 1000, interval_handler,
-			  qualle);
-		return err;
+	if (n <= 0) {
+		warning("qualify: failed to get peer URI for %s\n",
+			call_peeruri(call));
+		return;
 	}
 
-	err = ua_options_send(call_get_ua(call), peer_uri,
-			      options_resp_handler, mem_ref(qualle));
+	int err = ua_options_send(call_get_ua(call), peer_uri,
+				  options_resp_handler, mem_ref(qualle));
 	if (err) {
 		mem_deref(qualle);
 		warning("qualify: sending OPTIONS failed (%m)\n", err);
 		tmr_start(&qualle->int_tmr, qual_int * 1000, interval_handler,
 			  qualle);
-		return err;
+		return;
 	}
 
 	tmr_start(&qualle->to_tmr, qual_to * 1000, to_handler, qualle);
 	tmr_start(&qualle->int_tmr, qual_int * 1000, interval_handler, qualle);
-
-	return 0;
 }
 
 
