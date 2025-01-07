@@ -59,6 +59,12 @@ struct parcall {
 	const struct pargroup *group;
 };
 
+struct callarg {
+	struct re_printf *pf;
+	enum sdp_dir adir;
+	enum sdp_dir vdir;
+};
+
 
 static void pargroup_destructor(void *arg)
 {
@@ -272,16 +278,19 @@ static bool parpeer_find(struct le *le, void *arg)
 static bool parpeer_call(struct le *le, void *arg)
 {
 	struct parpeer *peer = le->data;
-	struct re_printf *pf = arg;
+	struct callarg *callarg = arg;
 	struct call *call;
 	struct parcall *c;
 	int err;
 
-	err = ua_connect(peer->ua, &call, NULL, peer->addr, VIDMODE_ON);
+	err = ua_connect_dir(peer->ua, &call, NULL, peer->addr, VIDMODE_ON,
+			     callarg->adir, callarg->vdir);
 	if (err)
 		return false;
 
-	re_hprintf(pf, "parallel call id: %s\n", call_id(call));
+	re_hprintf(callarg->pf, "parallel call id: %s audio=%s video=%s\n",
+		   call_id(call),
+		   sdp_dir_name(callarg->adir), sdp_dir_name(callarg->vdir));
 
 	c = mem_zalloc(sizeof(*c), parcall_destructor);
 	if (!c)
@@ -428,19 +437,54 @@ static int cmd_parcall(struct re_printf *pf, void *arg)
 	struct cmd_arg *carg = arg;
 	struct pargroup *g;
 	struct pl name;
-	const char *usage = "usage: /parcall <name>\n";
+	struct pl pldir[2] = {PL_INIT, PL_INIT};
+	struct callarg callarg = {
+		.pf = pf,
+		.adir = SDP_SENDRECV,
+		.vdir = SDP_SENDRECV,
+	};
+
+	const char *usage = "usage: /parcall <name>\n"
+			"/parcall <name>"
+			" audio=<inactive, sendonly, recvonly, sendrecv>"
+			" video=<inactive, sendonly, recvonly, sendrecv>\n"
+			"/parcall <name>"
+			" <sendonly, recvonly, sendrecv>\n"
+			"Audio & video must not be"
+			" inactive at the same time\n";
 
 	if (!str_isset(carg->prm)) {
 		(void)re_hprintf(pf, "%s", usage);
 		return EINVAL;
 	}
 
-	pl_set_str(&name, carg->prm);
+	int err = re_regex(carg->prm, str_len(carg->prm),
+			   "[^ ]+ audio=[^ ]* video=[^ ]*",
+			   &name, &pldir[0], &pldir[1]);
+	if (err) {
+		err = re_regex(carg->prm, str_len(carg->prm),
+			       "[^ ]* [^ ]*",
+			       &name, &pldir[0]);
+	}
+
+	if (err)
+		pl_set_str(&name, carg->prm);
+
 	g = find_pargroup(pf, &name, "parcall");
 	if (!g)
 		return EINVAL;
 
-	(void)list_apply(&g->peers, true, parpeer_call, pf);
+	if (!pl_isset(&pldir[1]))
+		pldir[1] = pldir[0];
+
+	callarg.adir = sdp_dir_decode(&pldir[0]);
+	callarg.vdir = sdp_dir_decode(&pldir[1]);
+	if (callarg.adir == SDP_INACTIVE && callarg.vdir == SDP_INACTIVE) {
+		(void)re_hprintf(pf, "%s", usage);
+		return EINVAL;
+	}
+
+	(void)list_apply(&g->peers, true, parpeer_call, &callarg);
 	return 0;
 }
 
