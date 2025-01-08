@@ -212,21 +212,20 @@ static void call_start_qualify(struct call *call,
 
 static bool qualle_get_applyh(struct le *le, void *arg)
 {
-	(void)le;
-	(void)arg;
+	const struct call *call = arg;
+	const struct qualle *qualle = le->data;
 
-	return true;
+	return qualle->call == call;
 }
 
 
-static struct qualle *call_get_qualle(const struct call *call)
+static struct qualle *call_get_qualle(struct call *call)
 {
 	if (!call)
 		return NULL;
 
-	struct le *le = hash_lookup(q.qual_map,
-				    hash_fast_str(call_id(call)),
-				    qualle_get_applyh, NULL);
+	struct le *le = hash_lookup(q.qual_map, hash_fast_str(call_id(call)),
+				    qualle_get_applyh, call);
 
 	return le ? le->data : NULL;
 }
