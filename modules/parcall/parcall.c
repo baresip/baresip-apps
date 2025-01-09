@@ -325,6 +325,25 @@ static int cmd_rmpar(struct re_printf *pf, void *arg)
 
 
 /**
+ * Clear list of parallel call groups
+ *
+ * @param pf   Print handler
+ * @param arg  not used
+ *
+ * @return 0 if success, otherwise errorcode
+ */
+static int cmd_clrpar(struct re_printf *pf, void *arg)
+{
+	(void)arg;
+
+	hash_flush(d.pargroups);
+	(void)re_hprintf(pf, "parcall: cleared parallel call groups\n");
+
+	return 0;
+}
+
+
+/**
  * Add a parallel call target to a group
  *
  * @param pf   Print handler
@@ -471,6 +490,7 @@ static int cmd_pardebug(struct re_printf *pf, void *arg)
 static const struct cmd cmdv[] = {
 	{"mkpar",    0,CMD_PRM, "Create parallel call group",    cmd_mkpar   },
 	{"rmpar",    0,CMD_PRM, "Remove parallel call group",    cmd_rmpar   },
+	{"clrpar",   0,      0, "Clear parallel call groups",    cmd_clrpar  },
 	{"paradd",   0,CMD_PRM, "Add a call target to a group",  cmd_paradd  },
 	{"parcall",  0,CMD_PRM, "Initiate parallel call to given group",
 								 cmd_parcall },
