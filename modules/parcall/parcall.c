@@ -303,8 +303,9 @@ static bool parpeer_call(struct le *le, void *arg)
 	if (err)
 		return false;
 
-	re_hprintf(callarg->pf, "parallel call id: %s audio=%s video=%s\n",
-		   call_id(call),
+	re_hprintf(callarg->pf, "parallel call uri: %s id: %s "
+		   "audio=%s video=%s\n",
+		   peer->addr, call_id(call),
 		   sdp_dir_name(callarg->adir), sdp_dir_name(callarg->vdir));
 
 	c = mem_zalloc(sizeof(*c), parcall_destructor);
