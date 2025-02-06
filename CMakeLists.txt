@@ -62,7 +62,13 @@ else()
   )
 
   if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-      list(APPEND c_flags -Watomic-implicit-seq-cst -Wshorten-64-to-32)
+    list(APPEND c_flags
+      -Watomic-implicit-seq-cst
+      -Wshorten-64-to-32
+      -Wno-gnu-zero-variadic-macro-arguments
+      -Wno-c2x-extensions
+    )
+
   endif()
 
   add_compile_options(
