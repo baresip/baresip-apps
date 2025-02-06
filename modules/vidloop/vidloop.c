@@ -3,8 +3,6 @@
  *
  * Copyright (C) 2010 Alfred E. Heggestad
  */
-#define _DEFAULT_SOURCE 1
-#define _BSD_SOURCE 1
 #include <string.h>
 #include <time.h>
 #include <re.h>
