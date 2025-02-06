@@ -6,7 +6,7 @@
 # Copyright (C) 2023 Christian Spielberger
 #
 
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.15..3.31)
 
 project(baresip-apps VERSION 2.9.0)
 
