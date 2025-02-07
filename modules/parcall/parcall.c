@@ -137,6 +137,21 @@ static bool parcall_first(struct le *le, void *arg)
 }
 
 
+static bool pargroup_hangup(struct le *le, void *arg)
+{
+	struct parcall *c   = le->data;
+	struct pargroup *g0 = arg;
+
+	if (c->group != g0)
+		return false;
+
+	struct call *call = c->call;
+	(void)ua_hangup(call_get_ua(call), call, 0, NULL);
+
+	return false;
+}
+
+
 static bool parcall_hangup(struct le *le, void *arg)
 {
 	struct parcall *c  = le->data;
@@ -509,6 +524,39 @@ static int cmd_parcall(struct re_printf *pf, void *arg)
 
 
 /**
+ * Hangup parallel call group with given name. All calls in the group are
+ * terminated
+ *
+ * @param pf   Print handler
+ * @param arg  Command arguments (carg)
+ *             carg->prm holds: <name>
+ *
+ * @return 0 if success, otherwise errorcode
+ */
+static int cmd_parhangup(struct re_printf *pf, void *arg)
+{
+	struct cmd_arg *carg = arg;
+	struct pargroup *g;
+	struct pl name;
+
+	const char *usage = "usage: /parhangup <name>\n";
+
+	if (!str_isset(carg->prm)) {
+		(void)re_hprintf(pf, usage);
+		return EINVAL;
+	}
+
+	pl_set_str(&name, carg->prm);
+	g = find_pargroup(pf, &name, "parhangup");
+	if (!g)
+		return EINVAL;
+
+	hash_apply(d.parcalls, pargroup_hangup, g);
+	return 0;
+}
+
+
+/**
  * Debug output of parallel call groups and parallel calls
  *
  * @param pf   Print handler
@@ -538,6 +586,7 @@ static const struct cmd cmdv[] = {
 	{"paradd",   0,CMD_PRM, "Add a call target to a group",  cmd_paradd  },
 	{"parcall",  0,CMD_PRM, "Initiate parallel call to given group",
 								 cmd_parcall },
+	{"parhangup",0,CMD_PRM, "Hangup parallel call group",   cmd_parhangup},
 	{"pardebug", 0,      0, "Print parallel call data",	 cmd_pardebug},
 };
 
