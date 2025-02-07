@@ -57,6 +57,7 @@ struct parcall {
 
 	struct call *call;
 	const struct pargroup *group;
+	struct tmr tmr;
 };
 
 struct callarg {
@@ -89,6 +90,7 @@ static void parcall_destructor(void *arg)
 {
 	struct parcall *c = arg;
 
+	tmr_cancel(&c->tmr);
 	hash_unlink(&c->hle);
 }
 
@@ -156,6 +158,16 @@ static bool parcall_hangup(struct le *le, void *arg)
 }
 
 
+static void cleanup_parcall(void *arg)
+{
+	struct parcall *c = arg;
+	mem_ref(c);
+	bevent_call_emit(BEVENT_CALL_CLOSED, c->call, "Rejected locally");
+	mem_deref(c->call);
+	mem_deref(c);
+}
+
+
 static bool parcall_cleanup(struct le *le, void *arg)
 {
 	struct parcall *c  = le->data;
@@ -166,11 +178,8 @@ static bool parcall_cleanup(struct le *le, void *arg)
 		return false;
 
 	call = c->call;
-	if (call != c0->call) {
-		bevent_call_emit(BEVENT_CALL_CLOSED, call,
-				 "Rejected locally");
-		mem_deref(call);
-	}
+	if (call != c0->call)
+		tmr_start(&c->tmr, 0, cleanup_parcall, c);
 
 	return false;
 }
