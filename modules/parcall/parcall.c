@@ -150,7 +150,27 @@ static bool parcall_hangup(struct le *le, void *arg)
 
 	call = c->call;
 	if (call != c0->call)
-		(void)ua_hangup(call_get_ua(call), call, 0, NULL);
+		(void)call_hangup(call, 0, NULL);
+
+	return false;
+}
+
+
+static bool parcall_cleanup(struct le *le, void *arg)
+{
+	struct parcall *c  = le->data;
+	struct parcall *c0 = arg;
+	struct call *call;
+
+	if (c->group != c0->group)
+		return false;
+
+	call = c->call;
+	if (call != c0->call) {
+		bevent_call_emit(BEVENT_CALL_CLOSED, call,
+				 "Rejected locally");
+		mem_deref(call);
+	}
 
 	return false;
 }
@@ -207,6 +227,7 @@ static void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
 			break;
 
 		hash_apply(d.parcalls, parcall_hangup, pc);
+		hash_apply(d.parcalls, parcall_cleanup, pc);
 	}
 
 	break;
