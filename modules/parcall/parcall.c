@@ -124,19 +124,6 @@ static bool pargroup_debug(struct le *le, void *arg)
 }
 
 
-static bool parcall_first(struct le *le, void *arg)
-{
-	struct parcall *c = le->data;
-	const struct pargroup **gp = arg;
-
-	if (!gp)
-		return true;
-
-	*gp = c->group;
-	return true;
-}
-
-
 static bool pargroup_hangup(struct le *le, void *arg)
 {
 	struct parcall *c   = le->data;
@@ -184,9 +171,30 @@ static bool parcall_debug(struct le *le, void *arg)
 }
 
 
-static void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
+static bool parcall_find(struct le *le, void *arg)
+{
+	struct parcall *c = le->data;
+	const struct call *call = arg;
+
+	if (c->call == call)
+		return true;
+
+	return false;
+}
+
+
+static struct parcall *find_parcall(const struct call *call)
 {
 	struct le *le;
+
+	le = hash_lookup(d.parcalls, hash_fast_str(call_id(call)),
+			 parcall_find, (void *) call);
+	return le ? le->data : NULL;
+}
+
+
+static void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
+{
 	struct call *call = bevent_get_call(event);
 
 	(void)arg;
@@ -194,23 +202,21 @@ static void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
 	switch (ev) {
 	case BEVENT_CALL_ESTABLISHED:
 	{
-		le = hash_lookup(d.parcalls, hash_fast_str(call_id(call)),
-				 parcall_first, NULL);
-		if (!le)
+		struct parcall *pc = find_parcall(call);
+		if (!pc)
 			break;
 
-		hash_apply(d.parcalls, parcall_hangup, le->data);
+		hash_apply(d.parcalls, parcall_hangup, pc);
 	}
 
 	break;
 	case BEVENT_CALL_CLOSED:
 	{
-		le = hash_lookup(d.parcalls, hash_fast_str(call_id(call)),
-				 parcall_first, NULL);
-		if (!le)
+		struct parcall *pc = find_parcall(call);
+		if (!pc)
 			break;
 
-		mem_deref(le->data);
+		mem_deref(pc);
 	}
 	break;
 	default:
