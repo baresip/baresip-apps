@@ -238,7 +238,7 @@ static int cmd_mkpar(struct re_printf *pf, void *arg)
 	const char *usage = "usage: /mkpar <name>\n";
 
 	if (!str_isset(carg->prm)) {
-		(void)re_hprintf(pf, "%s", usage);
+		(void)re_hprintf(pf, usage);
 		return EINVAL;
 	}
 
@@ -335,7 +335,7 @@ static int cmd_rmpar(struct re_printf *pf, void *arg)
 	const char *usage = "usage: /rmpar <name>\n";
 
 	if (!str_isset(carg->prm)) {
-		(void)re_hprintf(pf, "%s", usage);
+		(void)re_hprintf(pf, usage);
 		return EINVAL;
 	}
 
@@ -400,12 +400,12 @@ static int cmd_paradd(struct re_printf *pf, void *arg)
 	}
 
 	if (err) {
-		(void)re_hprintf(pf, "%s", usage);
+		(void)re_hprintf(pf, usage);
 		return err;
 	}
 
 	if (!pl_isset(&name) || !pl_isset(&addr)) {
-		(void)re_hprintf(pf, "%s", usage);
+		(void)re_hprintf(pf, usage);
 		return EINVAL;
 	}
 
@@ -488,7 +488,7 @@ static int cmd_parcall(struct re_printf *pf, void *arg)
 			" inactive at the same time\n";
 
 	if (!str_isset(carg->prm)) {
-		(void)re_hprintf(pf, "%s", usage);
+		(void)re_hprintf(pf, usage);
 		return EINVAL;
 	}
 
@@ -514,7 +514,7 @@ static int cmd_parcall(struct re_printf *pf, void *arg)
 	callarg.adir = sdp_dir_decode(&pldir[0]);
 	callarg.vdir = sdp_dir_decode(&pldir[1]);
 	if (callarg.adir == SDP_INACTIVE && callarg.vdir == SDP_INACTIVE) {
-		(void)re_hprintf(pf, "%s", usage);
+		(void)re_hprintf(pf, usage);
 		return EINVAL;
 	}
 
