@@ -10,6 +10,7 @@
 #include <net/if.h>
 #undef LIST_INIT
 #undef LIST_FOREACH
+#undef LIST_FOREACH_SAFE
 #endif
 #include <re.h>
 #include <baresip.h>
