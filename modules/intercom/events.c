@@ -255,7 +255,7 @@ static int outgoing_handler(const struct pl *name,
 static int check_hidden(const struct pl *name,
 			const struct pl *val, void *arg)
 {
-	struct call *call = arg;
+	struct bevent *event = arg;
 
 	if (!name || !val)
 		return 0;
@@ -263,7 +263,9 @@ static int check_hidden(const struct pl *name,
 	if (!is_intercom(name, val))
 		return 0;
 
-	call_set_evstop(call, is_hidden(val));
+	if (is_hidden(val))
+		bevent_stop(event);
+
 	return 0;
 }
 
@@ -320,7 +322,7 @@ void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 		hdrs = call_get_custom_hdrs(call);
 		if (ev != UA_EVENT_CALL_DTMF_START &&
 		    ev != UA_EVENT_CALL_DTMF_END) {
-			(void)custom_hdrs_apply(hdrs, check_hidden, call);
+			(void)custom_hdrs_apply(hdrs, check_hidden, event);
 		}
 	}
 
