@@ -9,7 +9,7 @@ jobs:
     strategy:
       matrix:
         compiler: [gcc, clang]
-        os: [ubuntu-20.04, ubuntu-22.04, macos-latest]
+        os: [ubuntu-22.04, ubuntu-24.04, macos-latest]
         exclude:
            - os: macos-latest
              compiler: gcc
@@ -53,7 +53,7 @@ jobs:
                             libvpx-dev
 
     - name: install aac
-      if: ${{ matrix.os == 'ubuntu-20.04' }}
+      if: ${{ matrix.os == 'ubuntu-22.04' }}
       run: |
         sudo apt-get update && sudo apt-get install -y libfdk-aac-dev
 
