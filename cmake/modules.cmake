@@ -16,6 +16,7 @@ set(MODULES
   qualify
   multicast
   redirect
+  ebuacip
 )
 
 if(FVAD_FOUND)
