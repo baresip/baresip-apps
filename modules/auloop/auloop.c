@@ -289,8 +289,8 @@ static int auloop_reset(struct audio_loop *al, uint32_t srate, uint8_t ch)
 
 	sampsz = aufmt_sample_size(al->fmt);
 
-	min_sz = sampsz * calc_nsamp(al->srate, al->ch, PTIME);
-	al->aubuf_maxsz = sampsz * calc_nsamp(al->srate, al->ch, PTIME*5);
+	min_sz = sampsz * au_calc_nsamp(al->srate, al->ch, PTIME);
+	al->aubuf_maxsz = sampsz * au_calc_nsamp(al->srate, al->ch, PTIME*5);
 
 	err = aubuf_alloc(&al->aubuf, min_sz, al->aubuf_maxsz);
 	if (err)

@@ -389,8 +389,8 @@ int mcplayer_start(const struct aucodec *ac)
 			goto out;
 		}
 
-		min_sz = sz * calc_nsamp(prm.srate, prm.ch, ptime_min);
-		max_sz = sz * calc_nsamp(prm.srate, prm.ch, ptime_max);
+		min_sz = sz * au_calc_nsamp(prm.srate, prm.ch, ptime_min);
+		max_sz = sz * au_calc_nsamp(prm.srate, prm.ch, ptime_max);
 
 		err = aubuf_alloc(&player->aubuf, min_sz, max_sz);
 		if (err) {
