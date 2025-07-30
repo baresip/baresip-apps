@@ -132,7 +132,7 @@ static int new_session(struct call *call)
 }
 
 
-static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
+static void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
 {
 	struct call *call = bevent_get_call(event);
 	int err;
@@ -140,7 +140,7 @@ static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 
 	switch (ev) {
 
-	case UA_EVENT_CALL_INCOMING:
+	case BEVENT_CALL_INCOMING:
 		debug("b2bua: CALL_INCOMING: peer=%s  -->  local=%s\n",
 		      call_peeruri(call), call_localuri(call));
 

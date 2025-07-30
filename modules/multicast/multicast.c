@@ -725,14 +725,14 @@ static const struct cmd cmdv[] = {
 };
 
 
-static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
+static void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
 {
 	(void)arg;
 	const struct sip_msg *msg  = bevent_get_msg(event);
 
 	switch (ev) {
 
-	case UA_EVENT_SIPSESS_CONN:
+	case BEVENT_SIPSESS_CONN:
 		if (mc.dnd) {
 			(void)sip_treply(NULL, uag_sip(), msg, 480,
 					 "Temporarily Unavailable");

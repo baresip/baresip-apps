@@ -17,7 +17,7 @@ static int reject_call(struct call *call, uint16_t scode, const char *reason)
 {
 	call_hangup(call, scode, reason);
 
-	bevent_call_emit(UA_EVENT_CALL_CLOSED, call, reason);
+	bevent_call_emit(BEVENT_CALL_CLOSED, call, reason);
 	return mem_deref_later(call);
 }
 
@@ -311,7 +311,7 @@ static int established_handler(const struct pl *name,
 }
 
 
-void event_handler(enum ua_event ev, struct bevent *event, void *arg)
+void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
 {
 	const struct list *hdrs;
 	struct ua   *ua   = bevent_get_ua(event);
@@ -320,37 +320,37 @@ void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 
 	if (call) {
 		hdrs = call_get_custom_hdrs(call);
-		if (ev != UA_EVENT_CALL_DTMF_START &&
-		    ev != UA_EVENT_CALL_DTMF_END) {
+		if (ev != BEVENT_CALL_DTMF_START &&
+		    ev != BEVENT_CALL_DTMF_END) {
 			(void)custom_hdrs_apply(hdrs, check_hidden, event);
 		}
 	}
 
 	switch (ev) {
 
-	case UA_EVENT_CREATE:
+	case BEVENT_CREATE:
 		ua_add_xhdr_filter(ua, "Subject");
 		break;
 
-	case UA_EVENT_CALL_INCOMING:
+	case BEVENT_CALL_INCOMING:
 
 		(void)custom_hdrs_apply(hdrs, incoming_handler, call);
 		break;
 
-	case UA_EVENT_CALL_LOCAL_SDP:
+	case BEVENT_CALL_LOCAL_SDP:
 		if (call_state(call) != CALL_STATE_OUTGOING)
 			break;
 
 		(void)custom_hdrs_apply(hdrs, outgoing_handler, call);
 		break;
 
-	case UA_EVENT_CALL_ESTABLISHED:
+	case BEVENT_CALL_ESTABLISHED:
 
 		(void)custom_hdrs_apply(hdrs, established_handler, call);
 		break;
 
 
-	case UA_EVENT_CALL_CLOSED:
+	case BEVENT_CALL_CLOSED:
 		call_hidden_close(call);
 
 		break;

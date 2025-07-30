@@ -131,7 +131,7 @@ static bool ebuacip_handler(const char *name, const char *value, void *arg)
 }
 
 
-static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
+static void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
 {
 	struct audio *au;
 	struct ua   *ua   = bevent_get_ua(event);
@@ -142,17 +142,17 @@ static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 #if 1
 	debug(".... ebuacip: [ ua=%s call=%s ] event: %s (%s)\n",
 	      account_aor(ua_account(ua)), call_id(call),
-	      uag_event_str(ev), txt);
+	      bevent_str(ev), txt);
 #endif
 
 	switch (ev) {
 
-	case UA_EVENT_CALL_LOCAL_SDP:
+	case BEVENT_CALL_LOCAL_SDP:
 		if (0 == str_casecmp(txt, "offer"))
 			set_ebuacip_params(call_audio(call));
 		break;
 
-	case UA_EVENT_CALL_REMOTE_SDP:
+	case BEVENT_CALL_REMOTE_SDP:
 		au = call_audio(call);
 		sdp_media_rattr_apply(stream_sdpmedia(audio_strm(au)),
 				      "ebuacip", ebuacip_handler, au);

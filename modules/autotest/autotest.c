@@ -93,7 +93,7 @@ static void dial(void *arg)
 }
 
 
-static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
+static void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
 {
 	struct ua   *ua   = bevent_get_ua(event);
 	struct call *call = bevent_get_call(event);
@@ -102,23 +102,23 @@ static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 	(void) arg;
 
 	info("autotest: [ ua=%s call=%s ] event: %s (%s)\n",
-	      account_aor(acc), call_id(call), uag_event_str(ev), txt);
+	      account_aor(acc), call_id(call), bevent_str(ev), txt);
 
 	switch (ev) {
 
-	case UA_EVENT_CALL_INCOMING:
-	case UA_EVENT_CALL_RINGING:
-	case UA_EVENT_CALL_PROGRESS:
-	case UA_EVENT_CALL_ANSWERED:
-	case UA_EVENT_CALL_ESTABLISHED:
-	case UA_EVENT_CALL_REMOTE_SDP:
-	case UA_EVENT_CALL_TRANSFER:
-	case UA_EVENT_CALL_TRANSFER_FAILED:
+	case BEVENT_CALL_INCOMING:
+	case BEVENT_CALL_RINGING:
+	case BEVENT_CALL_PROGRESS:
+	case BEVENT_CALL_ANSWERED:
+	case BEVENT_CALL_ESTABLISHED:
+	case BEVENT_CALL_REMOTE_SDP:
+	case BEVENT_CALL_TRANSFER:
+	case BEVENT_CALL_TRANSFER_FAILED:
 		if (d.dt_hangup)
 			tmr_start(&d.tmr_hangup, d.dt_hangup, hangup, NULL);
 		break;
 
-	case UA_EVENT_CALL_CLOSED:
+	case BEVENT_CALL_CLOSED:
 		if (d.dt_dial)
 			tmr_start(&d.tmr_dial, d.dt_dial, dial, NULL);
 		break;

@@ -209,19 +209,19 @@ static int kaoptions_stop(struct ua *ua)
 }
 
 
-static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
+static void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
 {
 	struct ua *ua = bevent_get_ua(event);
 	(void) arg;
 
 	switch (ev) {
-		case UA_EVENT_REGISTER_OK:
+		case BEVENT_REGISTER_OK:
 				kaoptions_alloc(ua);
 			break;
-		case UA_EVENT_REGISTER_FAIL:
+		case BEVENT_REGISTER_FAIL:
 				kaoptions_stop(ua);
 			break;
-		case UA_EVENT_UNREGISTERING:
+		case BEVENT_UNREGISTERING:
 				kaoptions_stop(ua);
 			break;
 
