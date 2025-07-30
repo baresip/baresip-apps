@@ -25,9 +25,9 @@
  * qual_int is greater than qual_to, and the call is incoming. As soon as
  * the call is established or closed, sending of OPTIONS is stopped.
  * If no response to an OPTIONS request is received within the specified
- * timeout, a UA_EVENT_MODULE with "peer offline" is triggered.
+ * timeout, a BEVENT_MODULE with "peer offline" is triggered.
  * In this case, the sending of OPTIONS still continues and if a subsequent
- * OPTIONS is answered, a UA_EVENT_MODULE with "peer online" is triggered.
+ * OPTIONS is answered, a BEVENT_MODULE with "peer online" is triggered.
  *
  * Example:
  * <sip:A@sip.example.com>;extra=qual_int=5,qual_to=2
@@ -241,7 +241,7 @@ static void qualle_stop_tmrs(struct qualle *qualle)
 }
 
 
-static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
+static void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
 {
 	struct ua   *ua   = bevent_get_ua(event);
 	struct call *call = bevent_get_call(event);
@@ -250,11 +250,11 @@ static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 	(void) arg;
 
 	switch (ev) {
-		case UA_EVENT_CALL_INCOMING:
+		case BEVENT_CALL_INCOMING:
 			(void)call_start_qualify(call, acc, NULL);
 			break;
 
-		case UA_EVENT_CALL_ESTABLISHED:
+		case BEVENT_CALL_ESTABLISHED:
 			if (call_is_outgoing(call))
 			    break;
 
@@ -262,7 +262,7 @@ static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 			qualle_stop_tmrs(qualle);
 			break;
 
-		case UA_EVENT_CALL_CLOSED:
+		case BEVENT_CALL_CLOSED:
 			qualle = call_get_qualle(call);
 			qualle_stop_tmrs(qualle);
 

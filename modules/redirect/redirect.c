@@ -28,7 +28,7 @@
  * ------
  *
  * The redirect module MUST be loaded before module menu because it stops the
- * UA_EVENT_SIPSESS_CONN event for an incoming SIP INVITE if a redirect is set
+ * BEVENT_SIPSESS_CONN event for an incoming SIP INVITE if a redirect is set
  * by the user. Whereas module menu would accept the SIP INVITE.
  *
  * ```
@@ -151,7 +151,7 @@ static int expires_alloc(char **bufp, uint32_t expires)
 }
 
 
-static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
+static void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
 {
 	struct le *le;
 	const struct sip_msg *msg = bevent_get_msg(event);
@@ -160,7 +160,7 @@ static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 	(void)arg;
 
 	switch (ev) {
-	case UA_EVENT_SIPSESS_CONN:
+	case BEVENT_SIPSESS_CONN:
 	{
 		le = list_apply(&d.redirs, true, redirect_search, ua);
 		if (!le)

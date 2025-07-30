@@ -184,7 +184,7 @@ static bool parcall_debug(struct le *le, void *arg)
 }
 
 
-static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
+static void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
 {
 	struct le *le;
 	struct call *call = bevent_get_call(event);
@@ -192,7 +192,7 @@ static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 	(void)arg;
 
 	switch (ev) {
-	case UA_EVENT_CALL_ESTABLISHED:
+	case BEVENT_CALL_ESTABLISHED:
 	{
 		le = hash_lookup(d.parcalls, hash_fast_str(call_id(call)),
 				 parcall_first, NULL);
@@ -203,7 +203,7 @@ static void event_handler(enum ua_event ev, struct bevent *event, void *arg)
 	}
 
 	break;
-	case UA_EVENT_CALL_CLOSED:
+	case BEVENT_CALL_CLOSED:
 	{
 		le = hash_lookup(d.parcalls, hash_fast_str(call_id(call)),
 				 parcall_first, NULL);
