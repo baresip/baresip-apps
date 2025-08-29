@@ -835,13 +835,22 @@ int mcreceiver_alloc(struct sa *addr, uint8_t prio)
 	mcreceiver->muted = false;
 	mcreceiver->state = LISTENING;
 
+	uint32_t jbuf_sz = cfg->audio.jbuf_sz;
 	jbuf_del  = cfg->audio.jbuf_del;
 	jbtype = cfg->audio.jbtype;
-	(void)conf_get_range(conf_cur(), "multicast_jbuf_delay", &jbuf_del);
+	if (0 == conf_get(conf_cur(), "multicast_jbuf_delay", &pl)) {
+		warning("multicast receiver: multicast_jbuf_delay is "
+			"deprecated, use multicast_jbuf_ms and "
+			"multicast_jbuf_size\n");
+	}
+
+	(void)conf_get_range(conf_cur(), "multicast_jbuf_ms", &jbuf_del);
+	(void)conf_get_u32(conf_cur(),   "multicast_jbuf_size", &jbuf_sz);
 	if (0 == conf_get(conf_cur(), "multicast_jbuf_type", &pl))
 		jbtype = conf_get_jbuf_type(&pl);
 
-	err = jbuf_alloc(&mcreceiver->jbuf, jbuf_del.min, jbuf_del.max);
+	err = jbuf_alloc(&mcreceiver->jbuf, jbuf_del.min, jbuf_del.max,
+			 jbuf_sz);
 	err |= jbuf_set_type(mcreceiver->jbuf, jbtype);
 	if (err)
 		goto out;
