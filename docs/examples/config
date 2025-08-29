@@ -24,7 +24,8 @@
 #multicast_ttl		1
 #multicast_iface	eth0		# needed for IPv6 multicast
 #multicast_jbuf_type	fixed		# off, fixed, adaptive
-#multicast_jbuf_delay	5-10		# frames
+#multicast_jbuf_ms	100-200		# delay range in [ms]
+#multicast_jbuf_size	50		# packets
 #multicast_fade_time	125		# fade in/out time in [ms]
 #multicast_listener	224.0.2.21:50000
 #multicast_listener	224.0.2.21:50002
