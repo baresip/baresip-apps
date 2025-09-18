@@ -4,6 +4,7 @@ if(DEFINED MODULES)
 endif()
 
 find_package(FVAD)
+find_package(MPA)
 
 set(MODULES
   auloop
@@ -21,6 +22,10 @@ set(MODULES
 
 if(FVAD_FOUND)
   list(APPEND MODULES fvad)
+endif()
+
+if(MPA_FOUND)
+  list(APPEND MODULES mpa)
 endif()
 
 if(DEFINED EXTRA_MODULES)
