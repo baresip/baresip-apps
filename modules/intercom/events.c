@@ -313,7 +313,7 @@ static int established_handler(const struct pl *name,
 
 void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
 {
-	const struct list *hdrs;
+	const struct list *hdrs = NULL;
 	struct ua   *ua   = bevent_get_ua(event);
 	struct call *call = bevent_get_call(event);
 	(void)arg;
