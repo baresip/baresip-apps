@@ -40,13 +40,15 @@ struct mcreceiver {
 	struct sa addr;
 	uint8_t prio;
 
-	struct udp_sock *rtp;
+	struct rtp_sock *rtp;          /**< RTP Socket                       */
 	uint32_t ssrc;
+	bool ssrc_set;                 /**< Incoming SSRC is set             */
 	struct jbuf *jbuf;
 
 	const struct aucodec *ac;
 
 	struct tmr timeout;
+	struct tmr tmr_decode;
 
 	enum state state;
 	bool muted;
@@ -78,6 +80,7 @@ static void mcreceiver_destructor(void *arg)
 	struct mcreceiver *mcreceiver = arg;
 
 	tmr_cancel(&mcreceiver->timeout);
+	tmr_cancel(&mcreceiver->tmr_decode);
 
 	if (mcreceiver->state == RUNNING)
 		mcplayer_stop();
@@ -410,11 +413,20 @@ static void timeout_handler(void *arg)
 	mcreceiver->state = LISTENING;
 	mcreceiver->muted = false;
 	mcreceiver->ssrc = 0;
-	mcreceiver->ac   = 0;
+	mcreceiver->ac   = NULL;
 	resume_uag_state();
 
 	mtx_unlock(&mcreceivl_lock);
 	return;
+}
+
+
+static void decode_frames(struct mcreceiver *rx);
+static void decode_tmr(void *arg)
+{
+	struct mcreceiver *rx = arg;
+
+	decode_frames(rx);
 }
 
 
@@ -423,35 +435,44 @@ static void timeout_handler(void *arg)
  *
  * @return 0 if success, otherwise errorcode
  */
-static int player_decode(struct mcreceiver *mcreceiver)
+static void decode_frames(struct mcreceiver *rx)
 {
 	void *mb = NULL;
 	struct rtp_header hdr;
-	int jerr;
-	int err;
+	int err = 0;
 
-	jerr = jbuf_get(mcreceiver->jbuf, &hdr, &mb);
-	if (jerr && jerr != EAGAIN)
-		return jerr;
+	uint32_t n = jbuf_packets(rx->jbuf);
 
-	err = mcplayer_decode(&hdr, mb, jerr == EAGAIN);
-	mb = mem_deref(mb);
-	if (err)
-		return err;
+	do {
+		err = jbuf_get(rx->jbuf, &hdr, &mb);
+		if (err && err != EAGAIN) {
+			break;
+		}
 
-	return jerr;
+		err = mcplayer_decode(&hdr, mb, err == EAGAIN);
+		mb = mem_deref(mb);
+		if (err)
+			break;
+	} while (n--);
+
+	int32_t delay;
+	delay = jbuf_next_play(rx->jbuf);
+	if (delay < 0)
+		delay = 10; /* Fallback time */
+
+	tmr_start(&rx->tmr_decode, delay, decode_tmr, rx);
 }
 
 
 /**
- * Handle incoming RTP packages
+ * Process incoming RTP packages
  *
  * @param src Source address
  * @param hdr RTP headers
  * @param mb  RTP payload
  * @param arg Multicast receiver object
  */
-static void rtp_handler(const struct sa *src, const struct rtp_header *hdr,
+static void rtp_process(const struct sa *src, const struct rtp_header *hdr,
 	struct mbuf *mb, void *arg)
 {
 	int err = 0;
@@ -460,9 +481,11 @@ static void rtp_handler(const struct sa *src, const struct rtp_header *hdr,
 	(void) src;
 	(void) mb;
 
-	mcreceiver->ac = pt2codec(hdr);
 	if (!mcreceiver->ac)
-		goto out;
+		mcreceiver->ac = pt2codec(hdr);
+
+	if (!mcreceiver->ac)
+		return;
 
 	if (!mbuf_get_left(mb))
 		goto out;
@@ -478,47 +501,43 @@ static void rtp_handler(const struct sa *src, const struct rtp_header *hdr,
 			goto out;
 		}
 
-		err = jbuf_put(mcreceiver->jbuf, hdr, mb);
-		if (err)
-			return;
-
-		if (player_decode(mcreceiver) == EAGAIN) {
-			(void) player_decode(mcreceiver);
-		}
+		jbuf_put(mcreceiver->jbuf, hdr, mb);
 	}
 
   out:
 	tmr_start(&mcreceiver->timeout, TIMEOUT, timeout_handler, mcreceiver);
-
-	return;
 }
 
 
-/**
- * udp receive handler
- *
- * @note This is a wrapper function for the RTP receive handler to allow an
- * any port number as receiving port.
- * RTP socket pointer of 0xdeadbeef is a dummy address. The function rtp_decode
- * does nothing on the socket pointer.
- *
- * @param src	src address
- * @param mb	payload buffer
- * @param arg	rtp_handler argument
- */
-static void rtp_handler_wrapper(const struct sa *src,
-	struct mbuf *mb, void *arg)
+static void rtp_receive(const struct sa *src, const struct rtp_header *hdr,
+			struct mbuf *mb, void *arg)
 {
-	int err = 0;
-	struct rtp_header hdr;
+	struct mcreceiver *rx = arg;
+	uint32_t ssrc0;
 
-	err = rtp_decode((struct rtp_sock*)0xdeadbeef, mb, &hdr);
-	if (err) {
-		warning("multicast receiver: Decoding of rtp (%m)\n", err);
+	if (rtp_pt_is_rtcp(hdr->pt)) {
+		debug("multicast receiver: drop incoming RTCP packet on RTP "
+			"port (pt=%u)\n", hdr->pt);
 		return;
 	}
 
-	rtp_handler(src, &hdr, mb, arg);
+	ssrc0 = rx->ssrc;
+	if (!rx->ssrc_set) {
+		rx->ssrc = hdr->ssrc;
+		rx->ssrc_set = true;
+		tmr_start(&rx->tmr_decode, 0, decode_tmr, rx);
+	}
+	else if (hdr->ssrc != ssrc0) {
+		debug("multicast receiver: SSRC changed 0x%x -> 0x%x"
+		     " (%zu bytes from %J)\n",
+		     ssrc0, hdr->ssrc,
+		     mbuf_get_left(mb), src);
+
+		rx->ssrc = hdr->ssrc;
+		jbuf_flush(rx->jbuf);
+	}
+
+	rtp_process(src, hdr, mb, arg);
 }
 
 
@@ -855,8 +874,8 @@ int mcreceiver_alloc(struct sa *addr, uint8_t prio)
 	if (err)
 		goto out;
 
-	err = udp_listen(&mcreceiver->rtp, &mcreceiver->addr,
-		rtp_handler_wrapper, mcreceiver);
+	err = rtp_listen(&mcreceiver->rtp, IPPROTO_UDP, &mcreceiver->addr,
+			 port, port+1, false, rtp_receive, NULL, mcreceiver);
 	if (err) {
 		warning("multicast receiver: udp listen failed:"
 			"af=%s port=%u-%u (%m)\n", net_af2name(sa_af(addr)),
