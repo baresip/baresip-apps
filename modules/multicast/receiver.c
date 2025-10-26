@@ -509,6 +509,19 @@ static void rtp_process(const struct sa *src, const struct rtp_header *hdr,
 }
 
 
+static int pt_to_srate(int pt)
+{
+	switch (pt) {
+
+	case 0:  return 8000;   /* PCMU */
+	case 8:  return 8000;   /* PCMA */
+	case 9:  return 16000;  /* G722 */
+
+	default: return 0;
+	}
+}
+
+
 static void rtp_receive(const struct sa *src, const struct rtp_header *hdr,
 			struct mbuf *mb, void *arg)
 {
@@ -526,6 +539,7 @@ static void rtp_receive(const struct sa *src, const struct rtp_header *hdr,
 		rx->ssrc = hdr->ssrc;
 		rx->ssrc_set = true;
 		tmr_start(&rx->tmr_decode, 0, decode_tmr, rx);
+		jbuf_set_srate(rx->jbuf, pt_to_srate(hdr->pt));
 	}
 	else if (hdr->ssrc != ssrc0) {
 		debug("multicast receiver: SSRC changed 0x%x -> 0x%x"
@@ -537,6 +551,8 @@ static void rtp_receive(const struct sa *src, const struct rtp_header *hdr,
 		jbuf_flush(rx->jbuf);
 	}
 
+	((struct rtp_header *) hdr)->ts_arrive =
+		tmr_jiffies() * pt_to_srate(hdr->pt) / 1000;
 	rtp_process(src, hdr, mb, arg);
 }
 
