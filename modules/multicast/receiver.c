@@ -551,9 +551,9 @@ static void rtp_receive(const struct sa *src, const struct rtp_header *hdr,
 		jbuf_flush(rx->jbuf);
 	}
 
-	((struct rtp_header *) hdr)->ts_arrive =
-		tmr_jiffies() * pt_to_srate(hdr->pt) / 1000;
-	rtp_process(src, hdr, mb, arg);
+	struct rtp_header hdrdup = *hdr;
+	hdrdup.ts_arrive = tmr_jiffies() * pt_to_srate(hdr->pt) / 1000;
+	rtp_process(src, &hdrdup, mb, arg);
 }
 
 
