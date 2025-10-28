@@ -905,8 +905,8 @@ int mcreceiver_alloc(struct sa *addr, uint8_t prio)
 #else
 	    ) {
 #endif
-		err = udp_multicast_join((struct udp_sock *)
-			mcreceiver->rtp, &mcreceiver->addr);
+		err = udp_multicast_join(rtp_sock(mcreceiver->rtp),
+					 &mcreceiver->addr);
 		if (err) {
 			warning ("multicast recevier: join multicast group "
 				"failed %J (%m)\n", &mcreceiver->addr, err);
