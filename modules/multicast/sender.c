@@ -101,6 +101,19 @@ static int mcsender_send_handler(size_t ext_len, bool marker,
 
 
 /**
+ * Gong EOF handler
+ *
+ * @param arg  Handler argument
+ */
+static void mcsender_gong_eof_handler(void *arg) {
+	struct mcsender *mcs = arg;
+
+	module_event("multicast", "sender gong eof", NULL, NULL,
+		     "addr=%J codec=%s", &mcs->addr, mcs->ac->name);
+}
+
+
+/**
  * Enable / Disable all existing sender
  *
  * @param enable
@@ -153,25 +166,30 @@ void mcsender_stop(struct sa *addr)
  *
  * @param addr  Destination address
  * @param codec Used audio codec
+ * @param gong  Optional absolute audio path
  *
  * @return 0 if success, otherwise errorcode
  */
-int mcsender_alloc(struct sa *addr, const struct aucodec *codec)
+int mcsender_alloc(struct sa *addr, const struct aucodec *codec,
+		   struct pl *gong)
 {
-	int err = 0;
 	struct mcsender *mcsender = NULL;
 	uint8_t ttl = multicast_ttl();
+	int err = 0;
 
 	if (!addr || !codec)
 		return EINVAL;
 
-	if (list_apply(&mcsenderl, true, mcsender_addr_cmp, addr))
-		return EADDRINUSE;
-
+	if (list_apply(&mcsenderl, true, mcsender_addr_cmp, addr)) {
+		err = EADDRINUSE;
+		goto out;
+	}
 
 	mcsender = mem_zalloc(sizeof(*mcsender), mcsender_destructor);
-	if (!mcsender)
-		return ENOMEM;
+	if (!mcsender) {
+		err = ENOMEM;
+		goto out;
+	}
 
 	sa_cpy(&mcsender->addr, addr);
 	mcsender->ac = codec;
@@ -189,8 +207,11 @@ int mcsender_alloc(struct sa *addr, const struct aucodec *codec)
 			IP_MULTICAST_TTL, &ttl, sizeof(ttl));
 	}
 
-	err = mcsource_start(&mcsender->src, mcsender->ac,
-		mcsender_send_handler, mcsender);
+	err = mcsource_start(&mcsender->src, mcsender->ac, gong,
+			     mcsender_send_handler, mcsender_gong_eof_handler,
+			     mcsender);
+	if (err)
+		goto out;
 
 	list_append(&mcsenderl, &mcsender->le, mcsender);
 

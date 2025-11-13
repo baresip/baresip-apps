@@ -174,31 +174,54 @@ static int cmd_mcsend(struct re_printf *pf, void *arg)
 {
 	int err = 0;
 	const struct cmd_arg *carg = arg;
-	struct pl pladdr, plcodec;
+	struct pl pladdr = PL_INIT;
+	struct pl plcodec = PL_INIT;
+	struct pl gong = PL_INIT;
 	struct sa addr;
 	struct aucodec *codec = NULL;
 
+	const char *usage = "usage: /mcsend addr=<IP>:<PORT> codec=<CODEC> "
+			    "optional(gong=<PATH>)\n";
+
 	err = re_regex(carg->prm, str_len(carg->prm),
-		"addr=[^ ]* codec=[^ ]*", &pladdr, &plcodec);
-	if (err)
-		goto out;
+		       "addr=[^ ]+ codec=[^ ]+ gong=[^ ]+",
+		       &pladdr, &plcodec, &gong);
+	if (err) {
+		err = re_regex(carg->prm, str_len(carg->prm),
+			       "addr=[^ ]+ codec=[^ ]+",
+			       &pladdr, &plcodec);
+			if (err) {
+				re_hprintf(pf, usage);
+				goto out;
+			}
+	}
 
 	err = decode_addr(&pladdr, &addr);
-	err |= decode_codec(&plcodec, &codec);
-	if (err)
+	if (err) {
+		re_hprintf(pf, "provided address not valid (%m)\n", err);
 		goto out;
+	}
+
+	err = decode_codec(&plcodec, &codec);
+	if (err) {
+		re_hprintf(pf, "provided codec not supported by baresip "
+			   "(%m)\n", err);
+		goto out;
+	}
 
 	err = check_rtp_pt(codec);
-	if (err)
+	if (err) {
+		re_hprintf(pf, "provided codec not supported by multicast "
+			   "(%m)\n", err);
 		goto out;
+	}
 
-	err = mcsender_alloc(&addr, codec);
+	err = mcsender_alloc(&addr, codec, &gong);
+	if (err)
+		re_hprintf(pf, "multicast sender allocation failed (%m)\n",
+			   err);
 
   out:
-	if (err)
-		re_hprintf(pf,
-			"usage: /mcsend addr=<IP>:<PORT> codec=<CODEC>\n");
-
 	return err;
 }
 
