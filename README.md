@@ -8,7 +8,8 @@ or [Wiki: Install GIT Version](https://github.com/baresip/baresip/wiki/Install:-
 for a full guide.
 
 ```bash
-$ cd baresip 
-$ cmake -B build -DAPP_MODULES_DIR=../baresip-apps/modules -DAPP_MODULES="auloop;vidloop"
-$ cmake --build build -j
+$ cd baresip
+$ cmake -B build
+$ cmake --build build
+$ cmake --install build
 ```
