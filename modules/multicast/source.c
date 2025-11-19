@@ -174,8 +174,9 @@ static int poll_aubuf_tx(struct mcsource *src)
 	}
 
 	aubuf_read_auframe(src->aubuf, &af);
-	if (af.srate != src->ac->srate) {
-		if (af.srate != src->resamp.irate) {
+	if (af.srate != src->ac->srate || af.ch != src->ac->ch) {
+		if (af.srate != src->resamp.irate ||
+		    af.ch != src->resamp.ich) {
 			debug ("mcsource: resampling resetup needed "
 				"(%u:%u -> %u:%u)\n",
 				af.srate, af.ch, src->ac->srate, src->ac->ch);
