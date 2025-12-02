@@ -201,6 +201,7 @@ void mcsender_enable(bool enable)
 void mcsender_stopall(void)
 {
 	list_flush(&mcsenderl);
+	multicast_set_dnd(false);
 }
 
 
@@ -223,6 +224,9 @@ void mcsender_stop(struct sa *addr)
 	mcsender = le->data;
 	list_unlink(&mcsender->le);
 	mem_deref(mcsender);
+
+	if (list_count(&mcsenderl) == 0)
+		multicast_set_dnd(false);
 }
 
 
@@ -294,6 +298,7 @@ int mcsender_alloc(struct sa *addr, const struct aucodec *codec,
 
 	mcsender->eofmax++;
 	list_append(&mcsenderl, &mcsender->le, mcsender);
+	multicast_set_dnd(true);
 
  out:
 	if (err)
