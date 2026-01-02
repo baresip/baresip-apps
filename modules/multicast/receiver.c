@@ -890,12 +890,13 @@ int mcreceiver_alloc(struct sa *addr, uint8_t prio)
 	if (err)
 		goto out;
 
-	err = rtp_listen(&mcreceiver->rtp, IPPROTO_UDP, &mcreceiver->addr,
-			 port, port+1, false, rtp_receive, NULL, mcreceiver);
+	err = rtp_listen_single(&mcreceiver->rtp, IPPROTO_UDP,
+				&mcreceiver->addr, port, rtp_receive,
+				mcreceiver);
 	if (err) {
 		warning("multicast receiver: udp listen failed:"
-			"af=%s port=%u-%u (%m)\n", net_af2name(sa_af(addr)),
-			port, port + 1, err);
+			"af=%s port=%u (%m)\n", net_af2name(sa_af(addr)),
+			port, err);
 		goto out;
 	}
 
