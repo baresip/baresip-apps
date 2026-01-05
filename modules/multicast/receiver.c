@@ -890,7 +890,7 @@ int mcreceiver_alloc(struct sa *addr, uint8_t prio)
 	if (err)
 		goto out;
 
-	err = rtp_listen_single(&mcreceiver->rtp, IPPROTO_UDP,
+	err = rtp_listen_single(&mcreceiver->rtp,
 				&mcreceiver->addr, port, rtp_receive,
 				mcreceiver);
 	if (err) {
