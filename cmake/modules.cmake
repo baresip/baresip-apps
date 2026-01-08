@@ -17,6 +17,7 @@ set(MODULES
   qualify
   multicast
   redirect
+  rtsp
   ebuacip
 )
 
