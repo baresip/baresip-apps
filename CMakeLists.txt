@@ -38,6 +38,11 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_C_STANDARD 11)
 
+if(APPLE)
+  set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+endif()
+
 if(MSVC)
   add_compile_options("/W3")
 else()
@@ -114,6 +119,10 @@ if(DEFAULT_CAFILE)
   add_definitions(-DDEFAULT_CAFILE="${DEFAULT_CAFILE}")
 endif()
 
+if(DEFAULT_CAPATH)
+  add_definitions(-DDEFAULT_CAPATH="${DEFAULT_CAPATH}")
+endif()
+
 if(DEFAULT_AUDIO_DEVICE)
   add_definitions(-DDEFAULT_AUDIO_DEVICE="${DEFAULT_AUDIO_DEVICE}")
 endif()
@@ -130,9 +139,10 @@ endif()
 
 include(modules)
 
+set(MODULES_DETECTED "")
+
 foreach(mod IN LISTS MODULES)
   add_subdirectory(modules/${mod})
-  set_target_properties(${mod} PROPERTIES PREFIX "")
 endforeach()
 
 foreach(mod IN LISTS APP_MODULES)
@@ -140,12 +150,19 @@ foreach(mod IN LISTS APP_MODULES)
     ${APP_MODULES_DIR}/${mod}
     ${CMAKE_CURRENT_BINARY_DIR}/app_modules/${mod}
   )
-  set_target_properties(${mod} PROPERTIES PREFIX "")
-  list(APPEND MODULES ${mod})
+  list(APPEND MODULES_DETECTED ${mod})
 endforeach()
 
+list(REMOVE_DUPLICATES MODULES_DETECTED)
+
+foreach(mod IN LISTS MODULES_DETECTED)
+  set_target_properties(${mod} PROPERTIES PREFIX "")
+endforeach()
+
+message("MODULES_DETECTED=${MODULES_DETECTED}")
+
 if(STATIC)
-  foreach(mod IN LISTS MODULES)
+  foreach(mod IN LISTS MODULES_DETECTED)
     set(MOD_EXPORTS
       "${MOD_EXPORTS}extern const struct mod_export exports_${mod};\n")
     set(MOD_EXPORT_TABLE
@@ -155,7 +172,7 @@ if(STATIC)
   configure_file(src/static.c.in src/static.c)
   list(APPEND SRCS ${CMAKE_CURRENT_BINARY_DIR}/src/static.c)
 else()
-  foreach(mod IN LISTS MODULES)
+  foreach(mod IN LISTS MODULES_DETECTED)
     if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
       set_target_properties(${mod} PROPERTIES
                             LINK_FLAGS "-undefined dynamic_lookup")
@@ -171,7 +188,7 @@ endif()
 
 
 if(NOT STATIC)
-  foreach(mod IN LISTS MODULES)
+  foreach(mod IN LISTS MODULES_DETECTED)
     install(TARGETS ${mod}
       LIBRARY
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/baresip/modules
