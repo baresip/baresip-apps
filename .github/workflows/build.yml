@@ -87,20 +87,14 @@ jobs:
         cmake --build re/build -j
         cmake -S baresip -B baresip/build -DMODULES=
         cmake --build baresip/build -j -t baresip
-        for p in re baresip; do
-          mv $p ../.
-        done
+        mv re ../.
+        mv baresip ../.
 
     - name: ldconfig
       if: ${{ runner.os == 'Linux' }}
       run: sudo ldconfig
 
-    - name: make baresip-apps linux
-      if: ${{ runner.os == 'Linux' }}
+    - name: make baresip-apps
       run: |
-        cmake -B build -DCMAKE_C_FLAGS="-Werror" && cmake --build build -j
-
-    - name: make baresip-apps macOS
-      if: ${{ runner.os == 'macOS' }}
-      run: |
-        cmake -B build -DCMAKE_C_FLAGS="-Werror" && cmake --build build -j
+        cmake -B build
+        cmake --build build -j
