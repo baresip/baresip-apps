@@ -8,26 +8,31 @@ jobs:
 
     strategy:
       matrix:
-        compiler: [gcc, clang]
+        compiler: [gcc, clang, gcc-14]
         os: [ubuntu-22.04, ubuntu-24.04, macos-latest]
         exclude:
-           - os: macos-latest
-             compiler: gcc
+          - os: macos-latest
+            compiler: gcc
+          - os: macos-latest
+            compiler: gcc-14
+          - os: ubuntu-22.04
+            compiler: gcc-14
     env:
       CC: ${{ matrix.compiler }}
-      MACOSX_DEPLOYMENT_TARGET: "10.10"
+      MACOSX_DEPLOYMENT_TARGET: "10.12"
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: openssl path macos
       if: ${{ runner.os == 'macOS' }}
       run: |
-        echo "OPENSSL_ROOT_DIR=/usr/local/opt/openssl" >> $GITHUB_ENV
+        echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl)" >> $GITHUB_ENV
 
     - name: Fix Ubuntu 22.04
       if: ${{ matrix.os == 'ubuntu-22.04' }}
       run: |
+        sudo apt-get update
         sudo apt-get remove libunwind-14 -y
         sudo apt-get install libunwind-dev -y
 
