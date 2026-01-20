@@ -1,7 +1,7 @@
 find_package(PkgConfig REQUIRED)
 
 # --- GStreamer ---
-pkg_check_modules(GST REQUIRED
+pkg_check_modules(GST
   gstreamer-1.0
   gstreamer-base-1.0
 )
