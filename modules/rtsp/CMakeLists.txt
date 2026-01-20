@@ -19,5 +19,6 @@ else()
 endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${GST_INCLUDE_DIRS})
+target_link_directories(${PROJECT_NAME} PRIVATE ${GST_LIBRARY_DIRS})
 target_link_libraries(${PROJECT_NAME} PRIVATE ${GST_LIBRARIES})
 target_compile_options(${PROJECT_NAME} PRIVATE -Wno-cast-align)
