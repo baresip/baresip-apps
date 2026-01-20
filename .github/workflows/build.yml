@@ -51,14 +51,23 @@ jobs:
       run: |
         sudo apt-get update && sudo apt-get install -y libfdk-aac-dev
 
-    - name: install packages
+    - name: Cache Homebrew downloads
+      if: ${{ runner.os == 'macOS' }}
+      uses: actions/cache@v3
+      with:
+        path: /Users/runner/Library/Caches/Homebrew
+        key: ${{ runner.os }}-brew-${{ hashFiles('**/Brewfile') }}
+        restore-keys: |
+          ${{ runner.os }}-brew-
+
+    - name: install dependencies macOS
       if: ${{ runner.os == 'macOS' }}
       run: |
         brew install codec2 \
                         mpg123 \
                         glib-utils \
-                        pkg-config
-
+                        pkg-config \
+                        gst-plugins-base
 
     - uses: sreimers/pr-dependency-action@v1
       with:
