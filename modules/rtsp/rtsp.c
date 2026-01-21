@@ -44,7 +44,6 @@ struct ausrc_st {
 	ausrc_error_h *errh;        /**< Error handler           */
 	void *arg;                  /**< Handler argument        */
 	struct ausrc_prm prm;       /**< Read parameters         */
-	struct aubuf *aubuf;        /**< Packet buffer           */
 	size_t psize;               /**< Packet size in bytes    */
 	size_t sampc;
 	uint32_t ptime;
@@ -145,9 +144,6 @@ static void ausrc_destructor(void *arg)
 	if (st->fakesink)
 		gst_object_unref(st->fakesink);
 
-	if (st->aubuf)
-		mem_deref(st->aubuf);
-
 	if (st->buf)
 		mem_deref(st->buf);
 
@@ -204,39 +200,11 @@ static int format_check(struct ausrc_st *st, GstStructure *s)
 }
 
 
-static void play_packet(struct ausrc_st *st)
-{
-	struct auframe af;
-	int err;
-
-	auframe_init(&af, st->prm.fmt,
-	             st->buf, st->sampc,
-	             st->prm.srate, st->prm.ch);
-
-	/* timed read from audio-buffer */
-	err = aubuf_get_samp(st->aubuf, st->prm.ptime,
-	                     st->buf, st->sampc);
-
-	if (err) {
-		/* Display unexpected errors */
-		if (err != ETIMEDOUT)
-			warning("rtsp: aubuf_get_samp failed : %m\n", err);
-
-		return;
-	}
-
-	/* call read handler */
-	if (st->rh)
-		st->rh(&af, st->arg);
-}
-
-
 /* Expected format: 16-bit signed PCM */
 static void packet_handler(struct ausrc_st *st, GstBuffer *buffer)
 {
 	GstMapInfo info;
 	struct auframe af;
-	int err;
 
 	if (!re_atomic_rlx(&st->run))
 		return;
@@ -257,22 +225,10 @@ static void packet_handler(struct ausrc_st *st, GstBuffer *buffer)
 	             st->prm.srate,
 	             st->prm.ch);
 
-	err = aubuf_write_auframe(st->aubuf, &af);
-	if (err) {
-		warning("rtsp: aubuf_write_auframe: %m\n", err);
-	}
+	if (st->rh)
+		st->rh(&af, st->arg);
 
 	gst_buffer_unmap(buffer, &info);
-
-	/* Empty buffer now */
-	while (re_atomic_rlx(&st->run)) {
-		play_packet(st);
-
-		if (aubuf_cur_size(st->aubuf) < st->psize)
-			break;
-
-		sys_usleep(st->prm.ptime * 1000 / 2);
-	}
 }
 
 
@@ -673,10 +629,6 @@ static int rtsp_src_alloc(struct ausrc_st **stp, const struct ausrc *as,
 		err = EINVAL;
 		goto out;
 	}
-
-	err = aubuf_alloc(&st->aubuf, st->psize, 0);
-	if (err)
-		goto out;
 
 	re_atomic_rlx_set(&st->run, true);
 	st->eos = false;
