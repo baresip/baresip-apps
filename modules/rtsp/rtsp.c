@@ -542,6 +542,36 @@ static void timeout(void *arg)
 }
 
 
+static void source_setup(GstElement * bin,
+                         GstElement * source,
+                         gpointer udata)
+{
+	struct ausrc_st *st = (struct ausrc_st *)udata;
+	(void)bin;
+
+	if (g_strcmp0 ("GstRTSPSrc",
+			G_OBJECT_TYPE_NAME(source)) == 0) {
+
+		info("rtsp: Found GstRTSPSrc\n");
+
+		st->rtspsrc = gst_object_ref(source);
+
+		g_object_set(source, "latency", st->ptime, NULL);
+
+		/* Enum 1 is onvif */
+		g_object_set(source, "backchannel", 1, NULL);
+
+		g_signal_connect (st->rtspsrc, "select-stream",
+	                  G_CALLBACK (find_backchannel), NULL);
+
+		backchannel.rtsp = gst_object_ref(st->rtspsrc);
+	}
+	else {
+		warning("rtsp: GstRTSPSrc not found\n");
+	}
+}
+
+
 static int rtsp_src_alloc(struct ausrc_st **stp, const struct ausrc *as,
                           struct ausrc_prm *prm, const char *device,
                           ausrc_read_h *rh, ausrc_error_h *errh, void *arg)
@@ -549,6 +579,7 @@ static int rtsp_src_alloc(struct ausrc_st **stp, const struct ausrc *as,
 	struct ausrc_st *st;
 	int err = 0;
 	gchar *pipe_str;
+	GstElement *uridecodebin3;
 
 	info("rtsp: Trying sourcing fron rtsp : %s\n", device);
 	if (!stp || !as || !prm)
@@ -599,12 +630,11 @@ static int rtsp_src_alloc(struct ausrc_st **stp, const struct ausrc *as,
 	}
 
 	pipe_str = g_strdup_printf (
-	        "rtspsrc name=pipestart backchannel=onvif"
-	        " latency=%u protocols=udp location=%s ! rtpmp4gdepay"
-	        " ! decodebin ! audioconvert ! audioresample ! "
+	        "uridecodebin3 name=pipestart uri=%s"
+	        " ! audioconvert ! audioresample ! "
 	        "audio/x-raw,format=S16LE,rate=%u,channels=%u "
-	        "!fakesink name=pipeend",
-	        st->ptime, device, prm->srate, prm->ch);
+	        "! fakesink name=pipeend",
+	        device, prm->srate, prm->ch);
 
 	info("rtsp: src gst launch : %s\n", pipe_str);
 	st->pipeline = gst_parse_launch (pipe_str, NULL);
@@ -616,8 +646,9 @@ static int rtsp_src_alloc(struct ausrc_st **stp, const struct ausrc *as,
 		goto out;
 	}
 
-	st->rtspsrc = gst_bin_get_by_name(GST_BIN(st->pipeline), "pipestart");
-	if (!st->rtspsrc) {
+	uridecodebin3 = gst_bin_get_by_name(GST_BIN(st->pipeline),
+	                                    "pipestart");
+	if (!uridecodebin3) {
 		warning("rtsp: Failed gst pipeline start.\n");
 		err = EINVAL;
 		goto out;
@@ -632,10 +663,6 @@ static int rtsp_src_alloc(struct ausrc_st **stp, const struct ausrc *as,
 
 	re_atomic_rlx_set(&st->run, true);
 	st->eos = false;
-
-	gst_element_set_state(st->pipeline, GST_STATE_PLAYING);
-	tmr_start(&st->tmr, st->ptime, timeout, st);
-
 	g_signal_connect(st->fakesink, "handoff",
 	                 G_CALLBACK(handoff_handler), st);
 	/* Override audio-sink handoff handler */
@@ -644,10 +671,11 @@ static int rtsp_src_alloc(struct ausrc_st **stp, const struct ausrc *as,
 	             "async", FALSE,
 	             NULL);
 
-	g_signal_connect (st->rtspsrc, "select-stream",
-	                  G_CALLBACK (find_backchannel), NULL);
+	g_signal_connect (uridecodebin3, "source-setup",
+			  G_CALLBACK (source_setup), st);
 
-	backchannel.rtsp = gst_object_ref(st->rtspsrc);
+	tmr_start(&st->tmr, st->ptime, timeout, st);
+	gst_element_set_state(st->pipeline, GST_STATE_PLAYING);
 
 out:
 	if (err)
