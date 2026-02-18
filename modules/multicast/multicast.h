@@ -22,6 +22,7 @@ uint8_t multicast_callprio(void);
 uint8_t multicast_ttl(void);
 uint32_t multicast_fade_time(void);
 void multicast_set_dnd(bool v);
+int multicast_addr_to_cname(char *cname, size_t size, const struct sa *addr);
 
 
 /* Sender */
@@ -49,7 +50,7 @@ void mcreceiver_enable(bool enable);
 void mcreceiver_print(struct re_printf *pf);
 
 /* Player <exchangable player> */
-int mcplayer_start(const struct aucodec *ac);
+int mcplayer_start(const struct aucodec *ac, const char *cname);
 void mcplayer_stop(void);
 void mcplayer_fadeout(void);
 void mcplayer_fadein(bool restart);
@@ -62,7 +63,7 @@ void mcplayer_terminate(void);
 /* Source <exchangable source> */
 struct mcsource;
 int mcsource_start(struct mcsource **srcp, const struct aucodec *ac,
-	mcsender_send_h *sendh, void *arg);
+		   const char *cname, mcsender_send_h *sendh, void *arg);
 void mcsource_stop(struct mcsource *src);
 
 int  mcsource_init(void);

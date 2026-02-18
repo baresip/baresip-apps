@@ -43,6 +43,7 @@ struct mcplayer {
 	struct list filterl;
 	char *module;
 	char *device;
+	char *cname;
 	void *sampv;
 	uint32_t ptime;
 	enum aufmt play_fmt;
@@ -67,6 +68,7 @@ static void mcplayer_destructor(void *arg)
 
 	mem_deref(player->module);
 	mem_deref(player->device);
+	mem_deref(player->cname);
 	mem_deref(player->dec);
 
 	mem_deref(player->sampv);
@@ -278,13 +280,13 @@ static int aufilt_setup(struct list *aufiltl)
 	for (le = list_head(aufiltl); le; le = le->next) {
 		struct aufilt *af = le->data;
 		struct aufilt_dec_st *decst = NULL;
-		void *ctx = NULL;
+		void *ctx = (void *)player->cname;
 
 		if (af->decupdh) {
 			err = af->decupdh(&decst, &ctx, af, &prm, NULL);
 			if (err) {
-				warning("multicast player: error in decoder"
-					"autio-filter '%s' (%m)\n",
+				warning("multicast player: error in decoder "
+					"audio-filter '%s' (%m)\n",
 					af->name, err);
 			}
 			else {
@@ -310,11 +312,12 @@ static int aufilt_setup(struct list *aufiltl)
  *
  * @note singleton
  *
- * @param ac   Audio codec
+ * @param ac    Audio codec
+ * @param cname Canonical name (multicast address)
  *
  * @return 0 if success, otherwise errorcode
  */
-int mcplayer_start(const struct aucodec *ac)
+int mcplayer_start(const struct aucodec *ac, const char *cname)
 {
 	int err = 0;
 	struct config_audio *cfg = &conf_config()->audio;
@@ -341,6 +344,7 @@ int mcplayer_start(const struct aucodec *ac)
 
 	err = str_dup(&player->module, cfg->play_mod);
 	err |= str_dup(&player->device, cfg->play_dev);
+	err |= str_dup(&player->cname, cname);
 	if (err)
 		goto out;
 

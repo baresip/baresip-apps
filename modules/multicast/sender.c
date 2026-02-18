@@ -158,6 +158,7 @@ void mcsender_stop(struct sa *addr)
  */
 int mcsender_alloc(struct sa *addr, const struct aucodec *codec)
 {
+	char cname[128];
 	int err = 0;
 	struct mcsender *mcsender = NULL;
 	uint8_t ttl = multicast_ttl();
@@ -189,8 +190,14 @@ int mcsender_alloc(struct sa *addr, const struct aucodec *codec)
 			IP_MULTICAST_TTL, &ttl, sizeof(ttl));
 	}
 
-	err = mcsource_start(&mcsender->src, mcsender->ac,
-		mcsender_send_handler, mcsender);
+	err = multicast_addr_to_cname(cname, sizeof(cname), &mcsender->addr);
+	if (err)
+		goto out;
+
+	err = mcsource_start(&mcsender->src, mcsender->ac, cname,
+			     mcsender_send_handler, mcsender);
+	if (err)
+		goto out;
 
 	list_append(&mcsenderl, &mcsender->le, mcsender);
 

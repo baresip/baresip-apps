@@ -31,6 +31,7 @@ struct mcsource {
 	struct auenc_state *enc;
 	enum aufmt src_fmt;
 	enum aufmt enc_fmt;
+	char *cname;
 
 	void *sampv;
 	struct aubuf *aubuf;
@@ -75,6 +76,7 @@ static void mcsource_destructor(void *arg)
 	}
 
 	src->ausrc = mem_deref(src->ausrc);
+	src->cname = mem_deref(src->cname);
 	src->aubuf = mem_deref(src->aubuf);
 	list_flush(&src->filtl);
 
@@ -468,7 +470,7 @@ static int aufilt_setup(struct mcsource *src, struct list *aufiltl)
 	for (le = list_head(aufiltl); le; le = le->next) {
 		struct aufilt *af = le->data;
 		struct aufilt_enc_st *encst = NULL;
-		void *ctx = NULL;
+		void *ctx = (void *)src->cname;
 
 		if (af->encupdh) {
 			err = af->encupdh(&encst, &ctx, af, &prm, NULL);
@@ -500,13 +502,14 @@ static int aufilt_setup(struct mcsource *src, struct list *aufiltl)
  *
  * @param srcp  Multicast source ptr
  * @param ac    Audio codec
+ * @param cname Canonical name (multicast address)
  * @param sendh Send handler ptr
  * @param arg   Send handler Argument
  *
  * @return 0 if success, otherwise errorcode
  */
 int mcsource_start(struct mcsource **srcp, const struct aucodec *ac,
-	mcsender_send_h *sendh, void *arg)
+		   const char *cname, mcsender_send_h *sendh, void *arg)
 {
 	int err = 0;
 	struct mcsource *src = NULL;
@@ -540,6 +543,7 @@ int mcsource_start(struct mcsource **srcp, const struct aucodec *ac,
 
 	err = str_dup(&src->module, cfg->src_mod);
 	err |= str_dup(&src->device, cfg->src_dev);
+	err |= str_dup(&src->cname, cname);
 	if (err)
 		goto out;
 
@@ -565,7 +569,7 @@ int mcsource_start(struct mcsource **srcp, const struct aucodec *ac,
 	if (err)
 		goto out;
 
-  out:
+out:
 	if (err)
 		mem_deref(src);
 	else

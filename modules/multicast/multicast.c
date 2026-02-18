@@ -119,6 +119,30 @@ static int check_rtp_pt(struct aucodec *ac)
 
 
 /**
+ * Convert multicast address to canonical name string
+ *
+ * @param cname Buffer to store the canonical name
+ * @param size  Size of the buffer
+ * @param addr  Source address
+ *
+ * @return 0 if success, otherwise errorcode
+ */
+int multicast_addr_to_cname(char *cname, size_t size, const struct sa *addr)
+{
+	int err;
+
+	if (!cname || !size || !addr)
+		return EINVAL;
+
+	err = re_snprintf(cname, size, "%J", addr);
+	if (err < 0)
+		return ENOMEM;
+
+	return 0;
+}
+
+
+/**
  * Getter for the call priority
  *
  * @return uint8_t call priority

@@ -53,6 +53,7 @@ struct mcreceiver {
 	enum state state;
 	bool muted;
 	bool enable;
+	char *cname;
 };
 
 
@@ -89,6 +90,7 @@ static void mcreceiver_destructor(void *arg)
 
 	mcreceiver->rtp  = mem_deref(mcreceiver->rtp);
 	mcreceiver->jbuf = mem_deref(mcreceiver->jbuf);
+	mcreceiver->cname = mem_deref(mcreceiver->cname);
 }
 
 
@@ -215,7 +217,7 @@ static void resume_uag_state(void)
 static int player_stop_start(struct mcreceiver *mcreceiver)
 {
 	mcplayer_fadeout();
-	return mcplayer_start(mcreceiver->ac);
+	return mcplayer_start(mcreceiver->ac, mcreceiver->cname);
 }
 
 
@@ -767,7 +769,8 @@ int mcreceiver_mute(uint32_t prio)
 		}
 		else {
 			mcplayer_fadein(false);
-			err = mcplayer_start(mcreceiver->ac);
+			err = mcplayer_start(mcreceiver->ac,
+					     mcreceiver->cname);
 			if (err == EINPROGRESS)
 				err = 0;
 		}
@@ -827,6 +830,7 @@ void mcreceiver_unreg(struct sa *addr){
  */
 int mcreceiver_alloc(struct sa *addr, uint8_t prio)
 {
+	char cname[128];
 	int err = 0;
 	uint16_t port;
 	struct mcreceiver *mcreceiver = NULL;
@@ -865,6 +869,14 @@ int mcreceiver_alloc(struct sa *addr, uint8_t prio)
 	sa_cpy(&mcreceiver->addr, addr);
 	port = sa_port(&mcreceiver->addr);
 	mcreceiver->prio = prio;
+
+	err = multicast_addr_to_cname(cname, sizeof(cname), &mcreceiver->addr);
+	if (err)
+		goto out;
+
+	err = str_dup(&mcreceiver->cname, cname);
+	if (err)
+		goto out;
 
 	mcreceiver->enable = true;
 	mcreceiver->muted = false;
