@@ -901,11 +901,7 @@ int mcreceiver_alloc(struct sa *addr, uint8_t prio)
 	}
 
 	if (IN_MULTICAST(sa_in(&mcreceiver->addr))
-#ifdef HAVE_INET6
 	    || IN6_IS_ADDR_MULTICAST(&mcreceiver->addr.u.in6.sin6_addr)) {
-#else
-	    ) {
-#endif
 		err = udp_multicast_join(rtp_sock(mcreceiver->rtp),
 					 &mcreceiver->addr);
 		if (err) {
