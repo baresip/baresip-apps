@@ -64,14 +64,9 @@ static void mcsource_destructor(void *arg)
 {
 	struct mcsource *src = arg;
 
-	switch (src->cfg->txmode) {
-		case AUDIO_MODE_THREAD:
-			if (re_atomic_rlx(&src->thr.run)) {
-				re_atomic_rlx_set(&src->thr.run, false);
-				thrd_join(src->thr.tid, NULL);
-			}
-		default:
-			break;
+	if (re_atomic_rlx(&src->thr.run)) {
+		re_atomic_rlx_set(&src->thr.run, false);
+		thrd_join(src->thr.tid, NULL);
 	}
 
 	src->ausrc = mem_deref(src->ausrc);
@@ -284,17 +279,6 @@ static void ausrc_read_handler(struct auframe *af, void *arg)
 
 	(void) aubuf_write(src->aubuf, af->sampv, num_bytes);
 	src->aubuf_started = true;
-
-	if (src->cfg->txmode == AUDIO_MODE_POLL) {
-		unsigned i;
-
-		for (i = 0; i < 16; i++) {
-			if (aubuf_cur_size(src->aubuf) < src->psize)
-				break;
-
-			poll_aubuf_tx(src);
-		}
-	}
 }
 
 
@@ -409,27 +393,15 @@ static int start_source(struct mcsource *src)
 			return err;
 		}
 
-		switch (src->cfg->txmode) {
-			case AUDIO_MODE_POLL:
-				break;
-			case AUDIO_MODE_THREAD:
-				if (!re_atomic_rlx(&src->thr.run)) {
-					re_atomic_rlx_set(&src->thr.run, true);
-					err = thread_create_name(&src->thr.tid,
-						"multicast", tx_thread, src);
-					if (err) {
-						re_atomic_rlx_set(
-							&src->thr.run, false);
-						return err;
-					}
-				}
-				break;
-
-			default:
-				warning ("multicast source: tx mode "
-					"not supported (%d)\n",
-					src->cfg->txmode);
-				return ENOTSUP;
+		if (!re_atomic_rlx(&src->thr.run)) {
+			re_atomic_rlx_set(&src->thr.run, true);
+			err = thread_create_name(&src->thr.tid,
+						 "multicast", tx_thread, src);
+			if (err) {
+				re_atomic_rlx_set(
+						  &src->thr.run, false);
+				return err;
+			}
 		}
 
 		src->ausrc_prm = prm;
