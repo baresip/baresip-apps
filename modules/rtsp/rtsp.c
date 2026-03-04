@@ -48,15 +48,15 @@ struct ausrc_st {
 	size_t sampc;
 	uint32_t ptime;
 
-	int16_t *buf;
 	struct tmr tmr;
 
 	GstElement *pipeline;
 	GstElement *rtspsrc;
-	GstElement *fakesink;
+	GstElement *sink;
 };
 
 struct auplay_st {
+	thrd_t thread;
 	size_t sampc;
 	size_t dsize;
 	int16_t *buf;
@@ -64,7 +64,18 @@ struct auplay_st {
 	void *arg;
 	struct auplay_prm prm;
 	RE_ATOMIC bool	run;
-	pthread_t	thread;
+};
+
+struct vidsrc_st {
+	RE_ATOMIC bool run;
+	unsigned rotation;
+	uint64_t ts;
+	struct vidsrc_prm prm;
+	struct vidsz size;
+	vidsrc_frame_h *frameh;
+	void *arg;
+	GstElement *pipeline;
+	GstElement *sink;
 };
 
 struct backchannel_t {
@@ -83,8 +94,13 @@ struct backchannel_t {
 	unsigned blocksize;
 };
 
-static struct ausrc *ausrc;
-static struct auplay *auplay;
+
+static struct ausrc *ausrc = NULL;
+static struct auplay *auplay = NULL;
+static struct vidsrc *vidsrc = NULL;
+
+static struct vidsrc_st *vidsrcst = NULL;
+static struct ausrc_st *ausrcst = NULL;
 
 static struct backchannel_t backchannel = {.stream_id = -1, .option=-1};
 
@@ -124,10 +140,8 @@ static void backchannel_unlink(void)
 }
 
 
-static void ausrc_destructor(void *arg)
+static void ausrc_st_clear(struct ausrc_st *st)
 {
-	struct ausrc_st *st = arg;
-
 	info("rtsp: Stopping rtsp source.\n");
 	re_atomic_rlx_set(&st->run, false);
 
@@ -136,18 +150,30 @@ static void ausrc_destructor(void *arg)
 	if (st->pipeline) {
 		gst_element_set_state(st->pipeline, GST_STATE_NULL);
 		gst_object_unref(st->pipeline);
+		st->pipeline = NULL;
 	}
 
-	if (st->rtspsrc)
+	if (st->rtspsrc) {
 		gst_object_unref(st->rtspsrc);
+		st->rtspsrc = NULL;
+	}
 
-	if (st->fakesink)
-		gst_object_unref(st->fakesink);
-
-	if (st->buf)
-		mem_deref(st->buf);
+	if (st->sink) {
+		gst_object_unref(st->sink);
+		st->sink = NULL;
+	}
 
 	backchannel_unlink();
+
+}
+
+
+static void ausrc_destructor(void *arg)
+{
+	struct ausrc_st *st = arg;
+
+	ausrcst = NULL;
+	ausrc_st_clear(st);
 }
 
 
@@ -157,7 +183,7 @@ static void auplay_destructor(void *arg)
 	info("rtsp: Stopping rtsp play.\n");
 	if (re_atomic_rlx(&st->run)) {
 		re_atomic_rlx_set(&st->run, false);
-		pthread_join(st->thread, NULL);
+		thrd_join(st->thread, NULL);
 	}
 
 	if (st->buf)
@@ -167,7 +193,25 @@ static void auplay_destructor(void *arg)
 }
 
 
-static int format_check(struct ausrc_st *st, GstStructure *s)
+static void vidsrc_destructor(void *arg)
+{
+	struct vidsrc_st *st = arg;
+
+	vidsrcst = NULL;
+
+	debug("rtsp: stopping video src read thread\n");
+	re_atomic_rlx_set(&st->run, false);
+	if (st->pipeline) {
+		gst_element_set_state(st->pipeline, GST_STATE_NULL);
+		gst_object_unref(st->pipeline);
+	}
+
+	if (st->sink)
+		gst_object_unref(st->sink);
+}
+
+
+static int au_format_check(struct ausrc_st *st, GstStructure *s)
 {
 	int rate, channels;
 	const char *fmt = NULL;
@@ -200,8 +244,39 @@ static int format_check(struct ausrc_st *st, GstStructure *s)
 }
 
 
+static int vid_format_check(struct vidsrc_st *st, GstStructure *s)
+{
+	int w, h;
+	const char *fmt = NULL;
+
+	if (!st || !s)
+		return EINVAL;
+
+	fmt = gst_structure_get_string(s, "format");
+	gst_structure_get_int(s, "width", &w);
+	gst_structure_get_int(s, "height", &h);
+
+	if (w != (int)st->size.w) {
+		warning("rtsp: unexpected video width\n");
+		return EINVAL;
+	}
+
+	if (h != (int)st->size.h) {
+		warning("rtsp: unexpected video height\n");
+		return EINVAL;
+	}
+
+	if (strcmp(fmt, "I420")) {
+		warning("rtsp: unexpected video format\n");
+		return EINVAL;
+	}
+
+	return 0;
+}
+
+
 /* Expected format: 16-bit signed PCM */
-static void packet_handler(struct ausrc_st *st, GstBuffer *buffer)
+static void au_packet_handler(struct ausrc_st *st, GstBuffer *buffer)
 {
 	GstMapInfo info;
 	struct auframe af;
@@ -232,20 +307,62 @@ static void packet_handler(struct ausrc_st *st, GstBuffer *buffer)
 }
 
 
-static void handoff_handler(GstElement *sink, GstBuffer *buffer,
-                            GstPad *pad, gpointer user_data)
+static void vid_packet_handler(struct vidsrc_st *st, GstBuffer *buffer)
+{
+	struct vidframe frame;
+	GstMapInfo info;
+
+	if (!re_atomic_rlx(&st->run))
+		return;
+
+	if (!gst_buffer_map(buffer, &info, GST_MAP_READ)) {
+		warning("rtsp: gst_buffer_map failed\n");
+		return;
+	}
+
+	vidframe_init_buf(&frame, st->prm.fmt, &st->size, info.data);
+
+	st->ts = GST_BUFFER_PTS(buffer) / 1000;
+	st->frameh(&frame, st->ts, st->arg);
+
+	gst_buffer_unmap(buffer, &info);
+}
+
+
+static void au_handoff_handler(GstElement *sink,
+			       GstBuffer *buffer,
+			       GstPad *pad,
+			       gpointer user_data)
 {
 	struct ausrc_st *st = user_data;
 	GstCaps *caps;
 	int err;
 	(void)sink;
 	caps = gst_pad_get_current_caps(pad);
-	err = format_check(st, gst_caps_get_structure(caps, 0));
+	err = au_format_check(st, gst_caps_get_structure(caps, 0));
 	gst_caps_unref(caps);
 	if (err)
 		return;
 
-	packet_handler(st, buffer);
+	au_packet_handler(st, buffer);
+}
+
+
+static void vid_handoff_handler(GstElement *sink,
+				GstBuffer *buffer,
+				GstPad *pad,
+				gpointer user_data)
+{
+	struct vidsrc_st *st = (struct vidsrc_st*)user_data;
+	GstCaps *caps;
+	int err;
+	(void)sink;
+	caps = gst_pad_get_current_caps(pad);
+	err = vid_format_check(st, gst_caps_get_structure(caps, 0));
+	gst_caps_unref(caps);
+	if (err)
+		return;
+	vid_packet_handler(st, buffer);
 }
 
 
@@ -284,7 +401,8 @@ static GstFlowReturn new_out_sample(GstElement *appsink,
 }
 
 
-static uint64_t take_samples(struct auplay_st *st) {
+static uint64_t take_samples(struct auplay_st *st)
+{
 	uint64_t sample_time;
 	struct auframe af;
 	GstFlowReturn ret;
@@ -324,7 +442,7 @@ static uint64_t take_samples(struct auplay_st *st) {
 }
 
 
-static void *write_thread(void *arg)
+static int write_thread(void *arg)
 {
 	struct auplay_st *st = arg;
 	uint32_t ptime = st->prm.ptime;
@@ -339,7 +457,7 @@ static void *write_thread(void *arg)
 	}
 
 	info("rtsp: Stopping write thread.\n");
-	return NULL;
+	return 0;
 }
 
 
@@ -421,8 +539,9 @@ static void backchannel_init(void)
 	               "caps=audio/x-raw,rate=(int)%u,channels=(int)%u,"
 	               "format=(string)S16LE,layout=(string)interleaved ! "
 	               "audioconvert ! audioresample ! audio/x-raw,"
-	               "rate=(int)%u,channels=(int)%u,format=(string)S16LE,"
-	               "layout=(string)interleaved ! %s ! appsink name=out",
+	               "rate=(int)%u,channels=(int)%u,"
+	               "format=(string)S16LE,layout=(string)interleaved "
+	               "! %s ! appsink name=out",
 	               backchannel.blocksize,
 	               backchannel.blocksize * 2,
 	               backchannel.src_rate,
@@ -572,14 +691,177 @@ static void source_setup(GstElement * bin,
 }
 
 
+static void rtsp_au_vid_src_init(const char * device,
+		struct vidsrc_st *vst,
+		struct ausrc_st *ast)
+{
+	char * pipe_str;
+	char * pipe_parts[4] = {0};
+	unsigned lens[4] = {0};
+	unsigned count = 1;
+	unsigned total_len;
+	GError *error = NULL;
+	GstElement * pipeline = NULL,
+		   * uridecodebin3 = NULL,
+		   * ausrcsink = NULL,
+		   * vidsrcsink = NULL;
+
+	pipe_parts[0] = g_strdup_printf (
+				"uridecodebin3 uri=%s name=pipestart ",
+				device);
+
+	if (!ast)
+		goto badexit;
+
+	if (!pipe_parts[0])
+		goto badexit;
+
+	lens[0] = strlen(pipe_parts[0]);
+	total_len = lens[0];
+
+	if (vst) {
+		const char * rotstr = "";
+
+		if (vst->prm.fmt != VID_FMT_YUV420P) {
+			warning("Require YUV420P video format.\n");
+			goto badexit;
+		}
+
+		if (vst->rotation == 1)
+			rotstr = "! videoflip method=clockwise";
+		else if (vst->rotation == 2)
+			rotstr = "! videoflip method=rotate-180";
+		else if (vst->rotation == 3)
+			rotstr = "! videoflip method=counterclockwise";
+
+		pipe_parts[count] = g_strdup_printf (
+					    "pipestart. "
+					    "! queue name=rtspvideoqueue "
+					    "%s ! videoconvert ! "
+					    "videorate ! videoscale ! "
+					    "video/x-raw,framerate=%u/1,"
+					    "format=I420,width=%u,height=%u "
+					    "! fakesink name=vidsink ",
+					    rotstr, (unsigned)vst->prm.fps,
+					    vst->size.w, vst->size.h);
+
+		if (!pipe_parts[count])
+			goto badexit;
+
+		lens[count] = strlen(pipe_parts[count]);
+		total_len += lens[count++];
+	}
+
+	info("rtsp: audio\n");
+	pipe_parts[count] = g_strdup_printf (
+				    "pipestart. "
+				    "! queue name=rtspaudioqueue "
+				    "! audioconvert ! audioresample "
+				    "! audio/x-raw,format=S16LE,"
+				    "rate=%u,channels=%u "
+				    "! fakesink name=ausink",
+				    ast->prm.srate, ast->prm.ch);
+
+	if (!pipe_parts[count])
+		goto badexit;
+
+	lens[count] = strlen(pipe_parts[count]);
+	total_len += lens[count++];
+
+	pipe_str = malloc(total_len + 1);
+	total_len = 0;
+
+	for (unsigned n = 0; n < count; n++) {
+		memcpy(pipe_str + total_len,
+		       pipe_parts[n],
+		       lens[n]);
+		g_free(pipe_parts[n]);
+		total_len += lens[n];
+	}
+
+	count = 0;
+	pipe_str[total_len] = 0;
+	info("rtsp: src gst launch : %s\n", pipe_str);
+	pipeline = gst_parse_launch (pipe_str, &error);
+	g_free (pipe_str);
+
+	if (!pipeline) {
+		warning("rtsp: Could not setup pipeline");
+		if (error != NULL) {
+			warning("rtsp: Error: %s", error->message);
+			g_clear_error (&error);
+		}
+		goto badexit;
+	}
+
+	uridecodebin3 = gst_bin_get_by_name(GST_BIN(pipeline), "pipestart");
+	ausrcsink = gst_bin_get_by_name(GST_BIN(pipeline), "ausink");
+	vidsrcsink = gst_bin_get_by_name(GST_BIN(pipeline), "vidsink");
+
+	if (!ausrcsink || !uridecodebin3) {
+		warning("rtsp: Could not find element of pipeline");
+		goto badexit;
+	}
+
+	if (vidsrcsink) {
+		g_signal_connect(vidsrcsink, "handoff",
+				 G_CALLBACK(vid_handoff_handler), vst);
+		/* Override audio-sink handoff handler */
+		g_object_set(G_OBJECT(vidsrcsink),
+		             "signal-handoffs", TRUE,
+		             "async", FALSE,
+		             NULL);
+		vst->sink = vidsrcsink;
+	}
+	else if (vst) {
+		warning("rtsp: Could not find video element of pipeline");
+		goto badexit;
+	}
+
+	ast->sink = ausrcsink;
+	re_atomic_rlx_set(&ast->run, true);
+	ast->eos = false;
+	g_signal_connect(ausrcsink, "handoff",
+			 G_CALLBACK(au_handoff_handler), ast);
+	/* Override audio-sink handoff handler */
+	g_object_set(G_OBJECT(ausrcsink),
+	             "signal-handoffs", TRUE,
+	             "async", FALSE,
+	             NULL);
+
+	g_signal_connect (uridecodebin3, "source-setup",
+	                  G_CALLBACK (source_setup), ast);
+
+	tmr_start(&ast->tmr, ast->ptime, timeout, ast);
+	gst_element_set_state(pipeline, GST_STATE_PLAYING);
+	ast->pipeline = pipeline;
+
+	return;
+badexit:
+	for (unsigned n = 0; n < count; n++) {
+		g_free(pipe_parts[n]);
+	}
+
+	if (ausrcsink)
+		gst_object_unref(ausrcsink);
+
+	if (vidsrcsink)
+		gst_object_unref(vidsrcsink);
+
+	if (uridecodebin3)
+		gst_object_unref(uridecodebin3);
+
+	if (pipeline)
+		gst_object_unref(pipeline);
+}
+
+
 static int rtsp_src_alloc(struct ausrc_st **stp, const struct ausrc *as,
                           struct ausrc_prm *prm, const char *device,
                           ausrc_read_h *rh, ausrc_error_h *errh, void *arg)
 {
 	struct ausrc_st *st;
 	int err = 0;
-	gchar *pipe_str;
-	GstElement *uridecodebin3;
 
 	info("rtsp: Trying sourcing fron rtsp : %s\n", device);
 	if (!stp || !as || !prm)
@@ -623,59 +905,19 @@ static int rtsp_src_alloc(struct ausrc_st **stp, const struct ausrc *as,
 	st->sampc = prm->srate * prm->ch * st->ptime / 1000;
 	st->psize = aufmt_sample_size(prm->fmt) * st->sampc;
 
-	st->buf = mem_zalloc(st->psize, NULL);
-	if (!st->buf) {
-		err = ENOMEM;
-		goto out;
-	}
+	ausrcst = st;
 
-	pipe_str = g_strdup_printf (
-	        "uridecodebin3 name=pipestart uri=%s"
-	        " ! audioconvert ! audioresample ! "
-	        "audio/x-raw,format=S16LE,rate=%u,channels=%u "
-	        "! fakesink name=pipeend",
-	        device, prm->srate, prm->ch);
+	if (vidsrcst)
+		info("rtsp: audio init and video init.\n");
+	else
+		info("rtsp: audio only init.\n");
 
-	info("rtsp: src gst launch : %s\n", pipe_str);
-	st->pipeline = gst_parse_launch (pipe_str, NULL);
-	g_free (pipe_str);
-
+	rtsp_au_vid_src_init(device, vidsrcst, ausrcst);
 	if (!st->pipeline) {
 		warning("rtsp: Failed gst rtsp pipeline.\n");
 		err = EINVAL;
 		goto out;
 	}
-
-	uridecodebin3 = gst_bin_get_by_name(GST_BIN(st->pipeline),
-	                                    "pipestart");
-	if (!uridecodebin3) {
-		warning("rtsp: Failed gst pipeline start.\n");
-		err = EINVAL;
-		goto out;
-	}
-
-	st->fakesink = gst_bin_get_by_name(GST_BIN(st->pipeline), "pipeend");
-	if (!st->fakesink) {
-		warning("rtsp: Failed gst pipeline end.\n");
-		err = EINVAL;
-		goto out;
-	}
-
-	re_atomic_rlx_set(&st->run, true);
-	st->eos = false;
-	g_signal_connect(st->fakesink, "handoff",
-	                 G_CALLBACK(handoff_handler), st);
-	/* Override audio-sink handoff handler */
-	g_object_set(G_OBJECT(st->fakesink),
-	             "signal-handoffs", TRUE,
-	             "async", FALSE,
-	             NULL);
-
-	g_signal_connect (uridecodebin3, "source-setup",
-			  G_CALLBACK (source_setup), st);
-
-	tmr_start(&st->tmr, st->ptime, timeout, st);
-	gst_element_set_state(st->pipeline, GST_STATE_PLAYING);
 
 out:
 	if (err)
@@ -722,7 +964,7 @@ static int rtsp_play_alloc(struct auplay_st **stp, const struct auplay *ap,
 	}
 
 	re_atomic_rlx_set(&st->run, true);
-	err = pthread_create(&st->thread, NULL, write_thread, st);
+	err = thread_create_name(&st->thread, "ausrc", write_thread, st);
 	if (err) {
 		warning("rtsp: Failed to start pipeline thread.\n");
 		re_atomic_rlx_set(&st->run, false);
@@ -737,6 +979,73 @@ static int rtsp_play_alloc(struct auplay_st **stp, const struct auplay *ap,
 out:
 	if (err)
 		auplay_destructor(st);
+	else
+		*stp = st;
+
+	return err;
+}
+
+
+static int rtsp_vidsrc_alloc(struct vidsrc_st **stp,
+			     const struct vidsrc *vs,
+			     struct vidsrc_prm *prm,
+			     const struct vidsz *size,
+			     const char *fmt,
+			     const char *device, vidsrc_frame_h *frameh,
+			     vidsrc_packet_h *packeth,
+			     vidsrc_error_h *errorh, void *arg)
+{
+	char ausource[1024];
+	struct vidsrc_st *st;
+	unsigned rotation = 0;
+	int err = 0;
+
+	(void)fmt;
+	(void)packeth;
+	(void)errorh;
+	(void)vs;
+
+	info("rtsp: Trying video from rtsp : %s\n", device);
+	if (!stp || !prm || !size || !frameh)
+		return EINVAL;
+
+	st = mem_zalloc(sizeof(*st), vidsrc_destructor);
+	if (!st)
+		return ENOMEM;
+
+	st->prm    = *prm;
+	st->frameh = frameh;
+	st->arg    = arg;
+	st->size   = *size;
+	re_atomic_rlx_set(&st->run, true);
+
+	conf_get_u32(conf_cur(), "rtsp_rotation", &rotation);
+	st->rotation = rotation % 4;
+
+	conf_get_str(conf_cur(), "audio_source",
+		     ausource, sizeof(ausource));
+
+	if (strncmp(ausource, "rtsp,", 5) ||
+	    strcmp(ausource + 5, device)) {
+		warning("rtsp: No audio rtsp source.\n");
+		err = EINVAL;
+		goto out;
+	}
+
+	vidsrcst = st;
+
+	if (ausrcst) {
+		info("rtsp: Audio started already, adding video.\n");
+		ausrc_st_clear(ausrcst); /* We are redoing, now with video*/
+		rtsp_au_vid_src_init(device, vidsrcst, ausrcst);
+	}
+	else {
+		info("rtsp: Match audio source, "
+		     "video init waiting on audio init.\n");
+	}
+out:
+	if (err)
+		mem_deref(st);
 	else
 		*stp = st;
 
@@ -765,8 +1074,13 @@ static int mod_rtsp_init(void)
 	if (err)
 		return err;
 
-	return auplay_register(&auplay, baresip_auplayl(),
-	                       "rtsp", rtsp_play_alloc);
+	err = auplay_register(&auplay, baresip_auplayl(),
+	                      "rtsp", rtsp_play_alloc);
+	if (err)
+		return err;
+
+	return vidsrc_register(&vidsrc, baresip_vidsrcl(),
+	                       "rtsp", rtsp_vidsrc_alloc, NULL);
 }
 
 
@@ -775,6 +1089,7 @@ static int mod_rtsp_close(void)
 	backchannel_unlink();
 	ausrc = mem_deref(ausrc);
 	auplay = mem_deref(auplay);
+	vidsrc = mem_deref(vidsrc);
 
 	info("rtsp: Stopping gst\n");
 	gst_deinit();
@@ -786,7 +1101,7 @@ static int mod_rtsp_close(void)
 
 EXPORT_SYM const struct mod_export DECL_EXPORTS(rtsp) = {
 	"rtsp",
-	"sound",
+	"sound/video",
 	mod_rtsp_init,
 	mod_rtsp_close
 };
