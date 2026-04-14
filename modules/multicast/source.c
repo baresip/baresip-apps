@@ -155,7 +155,7 @@ out:
  *
  * @return 0 if success, otherwise errorcode
  */
-static int poll_aubuf_tx(struct mcsource *src)
+static int send_aubuf(struct mcsource *src)
 {
 	struct auframe af;
 	size_t sampc = 0;
@@ -209,7 +209,7 @@ static int poll_aubuf_tx(struct mcsource *src)
 
 
 /**
- * Audio source error handler (file)
+ * Audio source error handler (mic)
  *
  * @param err Error code
  * @param str Error reason
@@ -220,7 +220,10 @@ static void src_mic_err_handler(int err, const char *str, void *arg)
 	struct mcsource *src = arg;
 	(void) src;
 	(void) str;
-	(void) err;
+
+	if (err) {
+		warning("mcsource: mic source (&m)\n", err);
+	}
 }
 
 
@@ -302,7 +305,7 @@ static void src_gong_err_handler(int err, const char *str, void *arg)
 
 
 /**
- * Audio source read handler (file)
+ * Audio source read handler (gong)
  *
  * @param af  Audio frame
  * @param arg Handler argument
@@ -355,7 +358,7 @@ static int tx_thread(void *arg)
 
 		mtx_lock(&src->lock);
 		if (aubuf_cur_size(src->aubuf) >= sz)
-			poll_aubuf_tx(src);
+			send_aubuf(src);
 		mtx_unlock(&src->lock);
 
 		ts += PTIME;
