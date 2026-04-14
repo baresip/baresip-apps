@@ -105,19 +105,27 @@ static int mcsender_send_handler(size_t ext_len, bool marker,
 	return err;
 }
 
+/**
+ * Generic Gong EOF handler
+ *
+ * @param mcs multicast sender struct
+ */
+static void mcsender_gong_eof_handler(struct mcsender *mcs) {
+	if (re_atomic_acq_add(&mcs->gong_eof, 1) == (mcs->eofmax - 1)) {
+		module_event("multicast", "sender gong eof", NULL, NULL,
+			"addr=%J codec=%s", &mcs->addr, mcs->ac->name);
+	}
+}
 
 /**
  * Gong EOF handler (multicast source)
  *
  * @param arg  Handler argument
  */
-static void mcsender_gong_eof_handler(void *arg) {
+static void mcsender_gong_stream_eof_handler(void *arg) {
 	struct mcsender *mcs = arg;
 
-	if (re_atomic_acq_add(&mcs->gong_eof, 1) == (mcs->eofmax - 1)) {
-		module_event("multicast", "sender gong eof", NULL, NULL,
-			"addr=%J codec=%s", &mcs->addr, mcs->ac->name);
-	}
+	mcsender_gong_eof_handler(mcs);
 }
 
 
@@ -132,10 +140,7 @@ static void mcsender_gong_play_end_handler(struct play *play, void *arg)
 	struct mcsender *mcs = arg;
 	(void) play;
 
-	if (re_atomic_acq_add(&mcs->gong_eof, 1) == (mcs->eofmax - 1)) {
-		module_event("multicast", "sender gong eof", NULL, NULL,
-			"addr=%J codec=%s", &mcs->addr, mcs->ac->name);
-	}
+	mcsender_gong_eof_handler(mcs);
 }
 
 
@@ -283,17 +288,21 @@ int mcsender_alloc(struct sa *addr, const struct aucodec *codec,
 	}
 
 	err = mcsource_start(&mcsender->src, mcsender->ac, gong,
-			     mcsender_send_handler, mcsender_gong_eof_handler,
+			     mcsender_send_handler,
+			     mcsender_gong_stream_eof_handler,
 			     mcsender);
 	if (err)
 		goto out;
 
-	mcsender->eofmax++;
-	err = setup_local_gong(mcsender, gong);
-	if (err) {
-		warning ("mcsender: local gong playback failed. "
-			"cancel multicast (%m)\n", err);
-		goto out;
+	/* Only allow local gong playback for the very first multicast.*/
+	if (list_count(&mcsenderl) == 0) {
+		mcsender->eofmax++;
+		err = setup_local_gong(mcsender, gong);
+		if (err) {
+			warning ("mcsender: local gong playback failed. "
+				"cancel multicast (%m)\n", err);
+			goto out;
+		}
 	}
 
 	mcsender->eofmax++;
