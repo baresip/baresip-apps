@@ -294,7 +294,7 @@ int mcsender_alloc(struct sa *addr, const struct aucodec *codec,
 	if (err)
 		goto out;
 
-	/* Only allow local gong playback for the very first multicast.*/
+	/* Only allow local gong playback for the first sender.*/
 	if (list_count(&mcsenderl) == 0) {
 		mcsender->eofmax++;
 		err = setup_local_gong(mcsender, gong);
