@@ -598,6 +598,7 @@ static int start_tx(struct mcsource *src)
 	if (!src)
 		return EINVAL;
 
+	debug("mcsource: startup tx_thread\n");
 	re_atomic_rlx_set(&src->thr.run, true);
 	err = thread_create_name(&src->thr.tid, "mcsource",
 					tx_thread, src);
@@ -645,14 +646,12 @@ int mcsource_start(struct mcsource **srcp, const struct aucodec *ac,
 
 	mc_src->cfg = &conf_config()->audio;
 
-	debug ("mcsource: setting up audio encoder %s\n", ac->name);
 	err = setup_aucodec(mc_src, ac);
 	if (err) {
 		warning ("mcsource: codec setup failed (%m)\n", err);
 		goto out;
 	}
 
-	debug ("mcsource: setting up and allocation of buffers\n");
 	err = setup_buffers(mc_src);
 	if (err) {
 		warning("mcsource: failed to allocate necessary buffers "
@@ -665,10 +664,8 @@ int mcsource_start(struct mcsource **srcp, const struct aucodec *ac,
 	mc_src->arg = arg;
 	mc_src->ts_ext = mc_src->ts_base = rand_u32();
 
-	debug ("mcsource: initialize resampler\n");
 	auresamp_init(&mc_src->resamp);
 
-	debug ("mcsource: setting up audio filter in applied order\n");
 	err = setup_aufilt(mc_src, baresip_aufiltl());
 	if (err) {
 		warning ("mcsource: audio filter setup failed (%m) \n", err);
@@ -677,7 +674,6 @@ int mcsource_start(struct mcsource **srcp, const struct aucodec *ac,
 
 	re_atomic_rlx_set(&mc_src->eof, true);
 	if (pl_isset(gong)) {
-		debug ("mcsource: setting up file source for pre-gong\n");
 		re_atomic_rlx_set(&mc_src->eof, false);
 		re_atomic_rlx_set(&mc_src->mic_muted, true);
 		err = pl_strdup(&mc_src->gong, gong);
@@ -694,7 +690,6 @@ int mcsource_start(struct mcsource **srcp, const struct aucodec *ac,
 		}
 	}
 
-	debug ("mcsource: setting up audio source\n");
 	err = setup_ausrc_mic(mc_src,
 			      ausrc_find(baresip_ausrcl(),
 			      mc_src->cfg->src_mod));
@@ -703,7 +698,6 @@ int mcsource_start(struct mcsource **srcp, const struct aucodec *ac,
 		goto out;
 	}
 
-	debug ("mcsource: startup transmission\n");
 	err = start_tx(mc_src);
 	if (err) {
 		warning("mcsource: transmission setup failed (%m)\n", err);
