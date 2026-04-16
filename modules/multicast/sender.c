@@ -34,6 +34,10 @@ struct mcsender {
 	struct config_audio *cfg;
 	const struct aucodec *ac;
 
+	struct play *play;
+	RE_ATOMIC uint8_t gong_eof;
+	uint8_t eofmax;
+
 	struct mcsource *src;
 	bool enable;
 };
@@ -44,8 +48,10 @@ static void mcsender_destructor(void *arg)
 	struct mcsender *mcsender = arg;
 
 	mcsource_stop(mcsender->src);
-	mcsender->src = mem_deref(mcsender->src);
-	mcsender->rtp = mem_deref(mcsender->rtp);
+
+	mcsender->play   = mem_deref(mcsender->play);
+	mcsender->src    = mem_deref(mcsender->src);
+	mcsender->rtp    = mem_deref(mcsender->rtp);
 }
 
 
@@ -99,6 +105,83 @@ static int mcsender_send_handler(size_t ext_len, bool marker,
 	return err;
 }
 
+/**
+ * Generic Gong EOF handler
+ *
+ * @param mcs multicast sender struct
+ */
+static void mcsender_gong_eof_handler(struct mcsender *mcs) {
+	if (re_atomic_acq_add(&mcs->gong_eof, 1) == (mcs->eofmax - 1)) {
+		module_event("multicast", "sender gong eof", NULL, NULL,
+			"addr=%J codec=%s", &mcs->addr, mcs->ac->name);
+	}
+}
+
+/**
+ * Gong EOF handler (multicast source)
+ *
+ * @param arg  Handler argument
+ */
+static void mcsender_gong_stream_eof_handler(void *arg) {
+	struct mcsender *mcs = arg;
+
+	mcsender_gong_eof_handler(mcs);
+}
+
+
+/**
+ * Gong EOF handler (baresip player)
+ *
+ * @param play
+ * @param arg
+ */
+static void mcsender_gong_play_end_handler(struct play *play, void *arg)
+{
+	struct mcsender *mcs = arg;
+	(void) play;
+
+	mcsender_gong_eof_handler(mcs);
+}
+
+
+/**
+ * Setup the player for local gong
+ *
+ * @param mcs  Multicast sender
+ * @param gong Path to gong file
+ *
+ * @return 0 if success, otherwise errorcode
+ */
+static int setup_local_gong(struct mcsender *mcs, struct pl *gong)
+{
+	char *file = NULL;
+	int err = 0;
+
+	if (!mcs)
+		return EINVAL;
+
+	if (!pl_isset(gong))
+		return 0;
+
+	err = pl_strdup(&file, gong);
+	if (err)
+		return err;
+
+	/* TODO: make multicast gong playback module and device configurable */
+	err = play_file(&mcs->play, baresip_player(), file, 0,
+			mcs->cfg->alert_mod, mcs->cfg->alert_dev);
+	if (err) {
+		warning ("mcsender: play file (%m)\n", err);
+		goto out;
+	}
+
+	play_set_finish_handler(mcs->play, mcsender_gong_play_end_handler,
+				mcs);
+out:
+	mem_deref(file);
+	return err;
+}
+
 
 /**
  * Enable / Disable all existing sender
@@ -123,6 +206,7 @@ void mcsender_enable(bool enable)
 void mcsender_stopall(void)
 {
 	list_flush(&mcsenderl);
+	multicast_set_dnd(false);
 }
 
 
@@ -145,6 +229,9 @@ void mcsender_stop(struct sa *addr)
 	mcsender = le->data;
 	list_unlink(&mcsender->le);
 	mem_deref(mcsender);
+
+	if (list_count(&mcsenderl) == 0)
+		multicast_set_dnd(false);
 }
 
 
@@ -153,46 +240,74 @@ void mcsender_stop(struct sa *addr)
  *
  * @param addr  Destination address
  * @param codec Used audio codec
+ * @param gong  Optional absolute audio path
  *
  * @return 0 if success, otherwise errorcode
  */
-int mcsender_alloc(struct sa *addr, const struct aucodec *codec)
+int mcsender_alloc(struct sa *addr, const struct aucodec *codec,
+		   struct pl *gong)
 {
-	int err = 0;
 	struct mcsender *mcsender = NULL;
 	uint8_t ttl = multicast_ttl();
+	int err = 0;
 
 	if (!addr || !codec)
 		return EINVAL;
 
-	if (list_apply(&mcsenderl, true, mcsender_addr_cmp, addr))
-		return EADDRINUSE;
-
+	if (list_apply(&mcsenderl, true, mcsender_addr_cmp, addr)) {
+		err = EADDRINUSE;
+		goto out;
+	}
 
 	mcsender = mem_zalloc(sizeof(*mcsender), mcsender_destructor);
-	if (!mcsender)
-		return ENOMEM;
+	if (!mcsender) {
+		err = ENOMEM;
+		goto out;
+	}
 
 	sa_cpy(&mcsender->addr, addr);
 	mcsender->ac = codec;
 	mcsender->enable = true;
+	mcsender->cfg = &conf_config()->audio;
+	mcsender->eofmax = 0;
+	re_atomic_rlx_set(&mcsender->gong_eof, 0);
 
 	err = rtp_open(&mcsender->rtp, sa_af(&mcsender->addr));
-	if (err)
+	if (err) {
+		warning ("mcsender: rtp socket creation failed (%m)", err);
 		goto out;
+	}
 
 	if (ttl > 1) {
 		struct udp_sock *sock;
+		debug ("mcsender: set RTP package TTL to %d\n", ttl);
 
 		sock = (struct udp_sock *) rtp_sock(mcsender->rtp);
 		udp_setsockopt(sock, IPPROTO_IP,
 			IP_MULTICAST_TTL, &ttl, sizeof(ttl));
 	}
 
-	err = mcsource_start(&mcsender->src, mcsender->ac,
-		mcsender_send_handler, mcsender);
+	err = mcsource_start(&mcsender->src, mcsender->ac, gong,
+			     mcsender_send_handler,
+			     mcsender_gong_stream_eof_handler,
+			     mcsender);
+	if (err)
+		goto out;
 
+	/* Only allow local gong playback for the first sender.*/
+	if (list_count(&mcsenderl) == 0) {
+		mcsender->eofmax++;
+		err = setup_local_gong(mcsender, gong);
+		if (err) {
+			warning ("mcsender: local gong playback failed. "
+				"cancel multicast (%m)\n", err);
+			goto out;
+		}
+	}
+
+	mcsender->eofmax++;
 	list_append(&mcsenderl, &mcsender->le, mcsender);
+	multicast_set_dnd(true);
 
  out:
 	if (err)
