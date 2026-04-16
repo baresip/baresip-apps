@@ -570,8 +570,7 @@ static int setup_aufilt(struct mcsource *src, struct list *aufiltl)
 			err = af->encupdh(&encst, &ctx, af, &prm, NULL);
 			if (err) {
 				warning ("mcsource: audio filter %s setup "
-					"failed (%m)\n",
-					af->name, err);
+					"failed (%m)\n", af->name, err);
 				continue;
 			}
 
