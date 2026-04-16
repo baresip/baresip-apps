@@ -377,6 +377,7 @@ static int tx_thread(void *arg)
 		ts += PTIME;
 	}
 
+	debug("mcsource: leave tx_thread loop\n");
 	return 0;
 }
 
