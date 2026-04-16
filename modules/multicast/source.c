@@ -159,6 +159,7 @@ static int send_aubuf(struct mcsource *src)
 {
 	struct auframe af;
 	size_t sampc = 0;
+	struct le *le;
 	int err = 0;
 
 	if (!re_atomic_rlx(&src->eof)) {
@@ -202,6 +203,16 @@ static int send_aubuf(struct mcsource *src)
 		}
 
 		auframe_update(&af, src->sampv_rs, sampc, af.timestamp);
+	}
+
+	for (le = src->filtl.head; le; le = le->next) {
+		struct aufilt_enc_st *st = le->data;
+		if (st->af && st->af->ench)
+			err |= st->af->ench(st, &af);
+	}
+
+	if (err) {
+		warning("mcsource: aufilter encode: (%m)\n", err);
 	}
 
 	return send_af(src, &af);
@@ -559,7 +570,7 @@ static int setup_aufilt(struct mcsource *src, struct list *aufiltl)
 			err = af->encupdh(&encst, &ctx, af, &prm, NULL);
 			if (err) {
 				warning ("mcsource: audio filter %s setup "
-					"faild (%m), continue with next\n",
+					"failed (%m)\n",
 					af->name, err);
 				continue;
 			}
