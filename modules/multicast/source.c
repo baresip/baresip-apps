@@ -354,6 +354,8 @@ static int tx_thread(void *arg)
 		     aufmt_sample_size(src->mic_prm.fmt);
 	uint64_t ts = 0;
 
+	debug("mcsource: enter tx_thread loop\n");
+
 	while (re_atomic_rlx(&src->thr.run)) {
 		uint64_t now;
 		sys_msleep(4);
@@ -597,7 +599,6 @@ static int start_tx(struct mcsource *src)
 	if (!src)
 		return EINVAL;
 
-	debug("mcsource: startup tx_thread\n");
 	re_atomic_rlx_set(&src->thr.run, true);
 	err = thread_create_name(&src->thr.tid, "mcsource",
 					tx_thread, src);
