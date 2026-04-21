@@ -19,6 +19,7 @@ set(MODULES
   redirect
   rtsp
   ebuacip
+  carddav
 )
 
 if(FVAD_FOUND)
