@@ -1,3 +1,11 @@
+/**
+ * @file carddav/carddav.c  CardDAV contacts plugin
+ *
+ *  CardDAV contacts for Baresip, pulls contacts from given CardDAV
+ *
+ * Copyright (C) 2026 - Joe Burmeister
+ */
+
 #include <stdio.h>
 #include <curl/curl.h>
 #include <stdint.h>
@@ -7,6 +15,25 @@
 
 #include <re.h>
 #include <baresip.h>
+
+
+/**
+ * @defgroup carddav carddav
+ *
+ * App module add carddav commands using libcurl
+ *
+ * This module adds command to refresh contacts from a CardDAV.
+ *
+ * Example config:
+ \verbatim
+  carddav_gateway       sip.example.co.uk
+  carddav_user          myusername:mypassword
+  carddav_url           https://my.mextcloud.org/remote.php/dav/addressbooks/\
+users/myuser/myshareuuid/
+  carddav_buf           32768
+ \endverbatim
+ */
+
 
 #define PTRDIFF(a,b) ((uintptr_t)a - (uintptr_t)b)
 
