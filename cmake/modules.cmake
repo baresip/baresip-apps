@@ -19,6 +19,7 @@ set(MODULES
   redirect
   rtsp
   ebuacip
+  calltimer
 )
 
 if(FVAD_FOUND)
