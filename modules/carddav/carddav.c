@@ -6,6 +6,7 @@
  * Copyright (C) 2026 - Joe Burmeister
  */
 
+#include <stddef.h>
 #include <stdio.h>
 #include <curl/curl.h>
 #include <stdint.h>
@@ -33,7 +34,6 @@
 users/myuser/myshareuuid/
   carddav_buf          524288
   carddav_at_boot      true
-  carddav_upload       true
   carddav_extras       1
   carddav_1_user       myusername:mypassword
   carddav_1_url        https://my.nextcloud2.org/remote.php/dav/addressbooks/\
@@ -58,7 +58,6 @@ struct carddav
 	const char *user;
 	const char *url;
 	unsigned count;
-	bool upload;
 
 	struct mbuf *mb;
 	const char *bpos;
@@ -388,96 +387,6 @@ static void move_contacts(struct list *contacts_a,
 }
 
 
-static int upload(struct carddav_context *context, const char *name)
-{
-	CURL *curl = curl_easy_init();
-	if (!curl)
-		return EINVAL;
-	unsigned len = re_snprintf(context->buf_b,
-	                           context->buf_len,
-	                           "%s/",
-	                           context->url);
-	unsigned namelen = strlen(name);
-
-	if (len + namelen + 5 > context->buf_len) {
-		warning("carddav: buffer to small for upload!\n");
-		return EINVAL;
-	}
-
-	for (unsigned n = 0; n < namelen; n++) {
-		char c = name[n];
-		if (isalnum(c))
-			context->buf_b[len++] = tolower(c);
-		else
-			context->buf_b[len++] = '_';
-	}
-
-	str_ncpy(&context->buf_b[len], ".vcf", context->buf_len - len);
-	debug("carddav: uploading %s\n", context->buf_b);
-
-	curl_easy_setopt(curl, CURLOPT_URL, context->buf_b);
-	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-	curl_easy_setopt(curl, CURLOPT_USERPWD, context->user);
-
-	struct curl_slist *hs;
-	hs = curl_slist_append(NULL, "Content-Type: text/vcf");
-
-	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, hs);
-	curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
-
-	curl_easy_setopt(curl, CURLOPT_POSTFIELDS, context->buf_a);
-
-	CURLcode result = curl_easy_perform(curl);
-	if (result == CURLE_OK)
-		debug("carddav: Uploaded %s\n", name);
-	else
-		warning("carddav: Upload %s failed: %s\n",
-		        name, curl_easy_strerror(result));
-	curl_easy_cleanup(curl);
-	return (int)result;
-}
-
-
-static int upload_phone_contact(struct carddav_context *context,
-                                const char *name,
-                                const char *phonenumber)
-{
-	re_snprintf(context->buf_a,
-	            context->buf_len,
-	            "BEGIN:VCARD\n"
-	            "VERSION:3.0\n"
-	            "FN:%s\n"
-	            "TEL:%s\n"
-	            "END:VCARD\n",
-	            name, phonenumber);
-
-	return upload(context, name);
-}
-
-
-static int upload_sip_contact(struct carddav_context *context,
-                              const char *name,
-                              const char *uri)
-{
-/*
-  Good note:
-  https://github.com/basepeak/roundcube-carddav/blob/main/doc/devdoc/IMPP.md
-  IMPP;TYPE=SIP:johndoe@aol.com
-*/
-
-	re_snprintf(context->buf_a,
-	            context->buf_len,
-	            "BEGIN:VCARD\n"
-	            "VERSION:3.0\n"
-	            "FN:%s\n"
-	            "IMPP;TYPE=%s\n"
-	            "END:VCARD\n",
-	            name, uri);
-
-	return upload(context, name);
-}
-
-
 static void extract_name(char name[64], const char *con_str)
 {
 	const char * pos = con_str + 1;
@@ -553,9 +462,6 @@ static int carddav_sync(void)
 		return EINVAL;
 	}
 
-	conf_get_bool(conf_cur(), "carddav_upload", &context.upload);
-	info("carddav: upload : %s\n", (context.upload)?"true":"false");
-
 	conf_get_u32(conf_cur(), "carddav_buf", &context.buf_len);
 	if (!context.buf_used)
 		context.buf_len = 1024 * 128;
@@ -629,17 +535,11 @@ static int carddav_sync(void)
 		carddav_sync_instance(&context);
 	}
 
-	/* Restore main carddav for any uploads. */
-	conf_get_str(conf_cur(), "carddav_user", user, sizeof(user));
-	conf_get_str(conf_cur(), "carddav_url", url, sizeof(url));
-
-	restore_and_upload_unique(&context, &contacts_list_org, false);
 	list_flush(&contacts_list_org);
 	goto cleanup;
 
 bad:
 	move_contacts(contacts_list, NULL, context.contacts);
-	restore_and_upload_unique(&context, &contacts_list_org, true);
 	list_flush(&contacts_list_org);
 
 cleanup:
