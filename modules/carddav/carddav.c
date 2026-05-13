@@ -47,7 +47,7 @@ users/myuser/myshareuuid/
 #define CARDDAV "(CardDAV)"
 
 
-struct carddav_context
+struct carddav
 {
 	struct contacts *contacts;
 	uint32_t buf_len;
@@ -59,6 +59,11 @@ struct carddav_context
 	const char *url;
 	unsigned count;
 	bool upload;
+
+	struct mbuf *mb;
+	const char *bpos;
+	const char *epos;
+	const char *vcard;
 };
 
 
@@ -82,7 +87,7 @@ static struct contact *in_contacts(struct contacts *contacts,
 }
 
 
-static int add_addr(struct carddav_context *context,
+static int add_addr(struct carddav *context,
                     char addr[1024])
 
 {
@@ -116,7 +121,7 @@ static void rstrip(struct pl * pl)
 
 static int process_tel_card(const char *cardpos,
                             uintptr_t cardend,
-                            struct carddav_context *context,
+                            struct carddav *context,
                             struct pl * name,
                             char * addr, size_t addr_len)
 {
@@ -212,61 +217,85 @@ out:
 }
 
 
-static int process_card(const char *cardstart,
-                         uintptr_t cardend,
-                         struct carddav_context *context)
+static int process_name_param(const struct pl *name_param,
+			      struct pl *name, struct pl *params)
 {
-	char addr[1024] = {0};
+	if (!pl_isset(name_param))
+		return EINVAL;
 
-	struct pl name;
+	/* parameter present */
+	int err = re_regex(name_param->p, name_param->l, "[~;]*;[~:]*",
+			           name, params);
+	if (err)
+		*name = *name_param;
 
-	int e = re_regex(cardstart,
-	                 PTRDIFF(cardend, cardstart),
-	                 "\nFN[:;]+["WILD"]+\n",
-	                 NULL, &name);
-	if (e) {
-		warning("carddav: No fullname : %s\n", strerror(e));
-		return e;
+	return 0;
+}
+
+
+static int process_line(struct carddav *d, const struct pl *line)
+{
+	struct pl group      = PL_INIT;
+	struct pl name_param = PL_INIT;
+	struct pl name       = PL_INIT;
+	struct pl params     = PL_INIT;
+	struct pl value      = PL_INIT;
+	(void)d;
+	int err;
+
+	/* group present */
+	err = re_regex(line->p, line->l, "[~\\.]+\\.[~:]*:[~]*",
+		           &group, &name_param, &value);
+	if (err) {
+		/* without group */
+		group = pl_null;
+		err = re_regex(line->p, line->l, "[~:]*:[~]*",
+			           &name_param, &value);
+	}
+	if (err) {
+		warning("invalid contentline: %r\n", line);
+		return EINVAL;
 	}
 
-	rstrip(&name);
+	err = process_name_param(&name_param, &name, &params);
+	if (err)
+		return err;
 
-	debug("carddav: Found: %r\n", &name);
+	/* Process decoded data  (replace the re_printf here). If it is needed,
+	 * store in carddav object.
+	   - Ignore everything outside BEGIN:VCARD and END:VCARD!
+	   - Check that VERSION follows BEGIN:VCARD!
+	   - Add a contact if found a SIP line.
+	 */
+	re_printf("group:  %r\n", &group);
+	re_printf("name:   %r\n", &name);
+	re_printf("params: %r\n", &params);
+	re_printf("value:  %r\n", &value);
+	return 0;
+}
 
-	struct pl impp;
 
-	/* RE's regex is only basic. A block will continue while characters
-	match. So the end must be non matching charcters. */
-	e = re_regex(cardstart,
-	             PTRDIFF(cardend, cardstart),
-	             "\nIMPP[:;]+["WILD"]+", NULL, &impp);
+static int process_vcard(struct carddav *d, const struct pl *card)
+{
+	if (!pl_isset(card))
+		return EINVAL;
 
-	if (!e) {
-		struct pl impphost;
-		struct pl imppuser;
+	const char *pos = card->p;
+	const char *end = card->p + card->l;
 
-		e = re_regex(impp.p, impp.l, "TYPE=SIP");
-		if (!e)
-			e = re_regex(impp.p, impp.l,
-			             ":[A-Za-z0-9]+@[a-z0-9\\-.]+",
-			             &imppuser, &impphost);
-		if (!e) {
-			re_snprintf(addr,
-			            sizeof(addr),
-			            "\"%r "CARDDAV"\" <sip:%r@%r>",
-			            &name, &imppuser, &impphost);
-			debug("carddav: IMPP SIP found\n");
+	while (pos < end) {
+		struct pl tail = {pos, end - pos};
+		const char *lineend = pl_strstr(&tail, "\r\n");
+		if (!lineend)
+			break;
 
-			e = add_addr(context, addr);
-			if (e)
-				return e;
-		}
-	}
+		struct pl line = {pos, lineend - pos};
+		int err;
+		err = process_line(d, &line);
+		if (err)
+			return err;
 
-	if (!addr[0]) {
-		return process_tel_card(cardstart, cardend,
-		                        context, &name,
-		                        addr, sizeof(addr));
+		pos = line.p + line.l + 2;
 	}
 
 	return 0;
@@ -278,81 +307,64 @@ static size_t writefunc(const void *ptr,
                         size_t nmemb,
                         void *userdata)
 {
-	struct carddav_context *context = userdata;
-
+	struct carddav *d = userdata;
 	size_t total = size*nmemb;
+	int err;
 
 	debug("carddav: Chunk of %zu\n", total);
+	const char *mbend = (const char *) mbuf_buf(d->mb);
+	const char *begin = "BEGIN:VCARD\r\n";
+	const char *end   = "END:VCARD\r\n";
 
-	unsigned freebuf = context->buf_len - context->buf_used;
+	if (!d->bpos) {
+		d->bpos = mbend;
+		d->epos = mbend;
+	}
 
-	if (freebuf < total) {
-		warning("carddav : chunks too big for free buffer %u\n",
-		        freebuf);
+	err = mbuf_write_mem(d->mb, ptr, total);
+	if (err)
 		return 0;
+
+	/* 1. TODO unfold: remove "/r/n " (CR LF SPACE)
+	 *  start at (mbend - 3)                       */
+
+	/* 2. look for BEGIN:VCARD, suggested like here */
+
+	mbend = (const char *) mbuf_buf(d->mb);
+	struct pl bcheck  = {d->bpos, mbend - d->bpos};
+	struct pl echeck  = {d->epos, mbend - d->epos};
+	const char *pos = NULL;
+	if (!d->vcard && (pos = pl_strstr(&bcheck, begin))) {
+		debug("carddav: Found card start.\n");
+		pos += strlen(begin);
+		d->vcard = pos;
+		d->epos  = pos;
 	}
+	else if (d->vcard && (pos = pl_strstr(&echeck, end))) {
+		/* 3. look for END:VCARD and rewind mbuf to save memory */
+		debug("carddav: Found card end.\n");
+		char *tail = NULL;
 
-	str_ncpy(context->buf_a + context->buf_used, ptr, total);
+		pos += strlen(end);
+		size_t tail_len = mbend - pos;
+		if (tail_len > 0) {
+			mbuf_set_pos(d->mb, mbuf_pos(d->mb) - tail_len);
+			err = mbuf_strdup(d->mb, &tail, tail_len);
+			if (err)
+				return 0;
+		}
 
-	context->buf_used += total;
+		struct pl card = {d->vcard, d->vcard - pos};
+		err = process_vcard(d, &card);
+		mbuf_rewind(d->mb);
+		d->vcard = NULL;
+		d->bpos  = NULL;
 
-	char *pos = memmem(context->buf_a,
-	                   context->buf_used,
-	                   "BEGIN:VCARD",
-	                   11);
-
-	if (!pos) {
-		debug("carddav: No card started after %u.\n",
-		      context->buf_used);
-		return total;
+		if (tail) {
+			mbuf_write_str(d->mb, tail);
+			mem_deref(tail);
+		}
 	}
-
-	pos += 11;
-
-	char *end = context->buf_a + context->buf_used;
-	char *cardend = memmem(pos,
-	                       PTRDIFF(end, pos),
-	                       "END:VCARD",
-	                       9);
-
-	if (!cardend) {
-		debug("carddav: No card complete after %u.\n",
-		      context->buf_used);
-		return total;
-	}
-
-	char * lastpos;
-
-	while (pos && cardend) {
-		process_card(pos,
-		             (uintptr_t)cardend,
-		             context);
-
-		lastpos = cardend + 9;
-
-		pos = memmem(lastpos,
-		             PTRDIFF(end, lastpos),
-		             "BEGIN:VCARD",
-		             11);
-		if (!pos)
-			break;
-
-		cardend = memmem(pos,
-		                 PTRDIFF(end, pos),
-		                 "END:VCARD",
-		                  9);
-	}
-
-	unsigned remaining = (unsigned)PTRDIFF(end, lastpos);
-
-	debug("carddav: Buffer swap with %u\n", remaining);
-
-	str_ncpy(context->buf_b, lastpos, remaining);
-	context->buf_used = remaining;
-
-	char *t = context->buf_a;
-	context->buf_a = context->buf_b;
-	context->buf_b = t;
 
 	return total;
 }
@@ -475,119 +487,7 @@ static void extract_name(char name[64], const char *con_str)
 }
 
 
-static void restore_and_upload_unique(struct carddav_context *context,
-                                      struct list *contacts_org,
-                                      bool just_restore)
-{
-	struct contacts *contacts = context->contacts;
-
-	for (struct le * cur = list_head(contacts_org);
-	    cur;
-	    cur = cur->next) {
-		struct contact *con = (struct contact*)cur->data;
-		const char *con_str = contact_str(con);
-		struct pl pl;
-		int e = -1;
-
-		const char *uri = contact_uri(con);
-
-		if (strstr(con_str, CARDDAV))
-			continue;
-
-		if (in_contacts(context->contacts, uri)) {
-			debug("carddav: Found \"%s\", not adding.\n",
-			      uri);
-			continue;
-		}
-
-		struct contact *dup = contact_find(contacts, uri);
-		if (dup)
-			continue;
-
-		const char *end = strchr(uri, '@');
-		if (!end) {
-			warning("carddav: Contact URI %s, no @\n",
-			        uri);
-			continue;
-		}
-
-		const char *pos = uri;
-		if (strncmp(pos, "sip:", 4)) {
-			warning("carddav: Contact URI %s, no sip:\n",
-			        uri);
-			continue;
-		}
-
-		pos+=4;
-		while (end && pos < end) {
-			if (!isdigit(*pos)) {
-				debug("carddav: Non-number URI %s\n",
-				      uri);
-				break;
-			}
-			++pos;
-		}
-
-		char name[64] = {0};
-		extract_name(name, con_str);
-
-		if (pos == end) {
-			unsigned len = PTRDIFF(end, uri) - 3;
-			char pn[16] = {0};
-
-			str_ncpy(pn, uri+4, len);
-
-			re_snprintf(context->buf_a,
-			            context->buf_len,
-			            "sip:%s@%s",
-			            pn, context->gateway);
-
-			dup = contact_find(contacts, context->buf_a);
-			if (dup) {
-				debug("carddav: Phone number %s"
-				      " already on gateway.\n", pn);
-				continue;
-			}
-
-			if (!just_restore && context->upload) {
-				debug("carddav: Uploading \"%s\" "
-				      "Phone number %s\n",
-				      name,  pn);
-				e = upload_phone_contact(context, name, pn);
-			}
-		}
-		else {
-			if (!just_restore && context->upload) {
-				debug("carddav: Uploading \"%s\" "
-				      "Non-number %s\n",
-				      name,  uri);
-				e = upload_sip_contact(context, name, uri);
-			}
-		}
-
-		if (!e) {
-			re_snprintf(context->buf_a,
-			            context->buf_len,
-			            "\"%s "CARDDAV"\" <%s>",
-			            name, uri);
-
-			info("carddav: Adding as back %s\n", context->buf_a);
-			pl_set_str(&pl, context->buf_a);
-		}
-		else {
-			info("carddav: Adding back %s\n", con_str);
-			pl_set_str(&pl, con_str);
-		}
-
-		e = contact_add(contacts, NULL, &pl);
-		if (e)
-			warning("carddav: Failed to add back %.*s : %s\n",
-			        pl.l, pl.p, strerror(e));
-	}
-}
-
-
-static int carddav_sync_instance(struct carddav_context *context)
+static int carddav_sync_instance(struct carddav *context)
 {
 	info("carddav: using URL: %s\n", context->url);
 	info("carddav: using user: %s\n", context->user);
@@ -641,7 +541,7 @@ static int carddav_sync(void)
 	char url[4096] = {0};
 	char gateway[256] = {0};
 
-	struct carddav_context context = {0};
+	struct carddav context = {0};
 
 	if (conf_get_str(conf_cur(), "carddav_gateway",
 	                 gateway, sizeof(gateway)) ||
