@@ -46,6 +46,11 @@ users/myuser/myshareuuid/
 #define WILD "!-\\~ "
 #define CARDDAV "(CardDAV)"
 
+#define VCARDBEGIN "BEGIN:VCARD"
+#define VCARDEND   "END:VCARD"
+#define VCARDBEGINLEN strlen(VCARDBEGIN)
+#define VCARDENDLEN   strlen(VCARDEND)
+
 
 struct carddav_context
 {
@@ -335,62 +340,51 @@ static size_t writefunc(const void *ptr,
 		return e;
 	}
 
-	char *pos = memmem(context->buf_a->buf,
-	                   mbuf_pos(context->buf_a),
-	                   "BEGIN:VCARD",
-	                   11);
-
-	if (!pos) {
-		debug("carddav: No card started after %zu.\n",
-		      mbuf_pos(context->buf_a));
-		return total;
-	}
-	pos += 11;
-
+	char *pos = (char*)context->buf_a->buf;
 	char *end = (char*)mbuf_buf(context->buf_a);
-	char *cardend = memmem(pos,
-	                       PTRDIFF(end, pos),
-	                       "END:VCARD",
-	                       9);
+	unsigned vcards = 0;
 
-	if (!cardend) {
-		debug("carddav: No card complete after %zu.\n",
-		      mbuf_pos(context->buf_a));
-		return total;
-	}
+	while (pos < end) {
+		char *cardbegin = memmem(pos,
+		                         PTRDIFF(end, pos),
+		                         VCARDBEGIN,
+		                         VCARDBEGINLEN);
+		if (!cardbegin)
+			break;
+		cardbegin += VCARDBEGINLEN;
 
-	char * lastpos;
+		char *cardend = memmem(cardbegin,
+		                       PTRDIFF(end, cardbegin),
+		                       VCARDEND,
+		                       VCARDENDLEN);
+		if (!cardend)
+			break;
 
-	while (pos && cardend) {
-		struct pl card = {.p = pos, .l = PTRDIFF(cardend, pos) };
+		++vcards;
+
+		struct pl card = {.p = cardbegin,
+		                  .l = PTRDIFF(cardend, cardbegin) };
 		struct carddav d = {0};
 		process_vcard(&d, &card, context);
 
 		debug("carddav: Loaded %u for %r\n",
 		      d.contacts,  &d.fullname);
 
-		lastpos = cardend + 9;
-
-		pos = memmem(lastpos,
-		             PTRDIFF(end, lastpos),
-		             "BEGIN:VCARD",
-		             11);
-		if (!pos)
-			break;
-		pos += 11;
-
-		cardend = memmem(pos,
-		                 PTRDIFF(end, pos),
-		                 "END:VCARD",
-		                  9);
+		pos = cardend + VCARDENDLEN;
 	}
 
-	unsigned remaining = (unsigned)PTRDIFF(end, lastpos);
+	if (!vcards) {
+		debug("carddav: No cards found after %zu.\n",
+		      mbuf_pos(context->buf_a));
+		return total;
+	}
+
+	unsigned remaining = (unsigned)PTRDIFF(end, pos);
 
 	debug("carddav: Buffer swap with %u\n", remaining);
 
 	mbuf_set_pos(context->buf_b, 0);
-	e = mbuf_write_mem(context->buf_b, (uint8_t*)lastpos, remaining);
+	e = mbuf_write_mem(context->buf_b, (uint8_t*)pos, remaining);
 	if (e) {
 		warning("carddav : buffer swap write failed %s\n",
 		        strerror(e));
