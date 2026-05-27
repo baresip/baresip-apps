@@ -51,6 +51,12 @@ users/myuser/myshareuuid/
 #define VCARDBEGINLEN strlen(VCARDBEGIN)
 #define VCARDENDLEN   strlen(VCARDEND)
 
+#define MAXURLLEN     1024
+#define MAXGATEWAYLEN  256
+#define MAXUSERLEN     256
+#define MAXADDRLEN     256
+#define MAXSIPLEN      256
+
 
 struct carddav_context
 {
@@ -58,9 +64,11 @@ struct carddav_context
 	uint32_t buf_len;
 	struct mbuf *buf_a;
 	struct mbuf *buf_b;
-	char *gateway;
-	const char *user;
-	const char *url;
+	char url[MAXURLLEN];
+	char gateway[MAXGATEWAYLEN];
+	char user[MAXUSERLEN];
+	char addr[MAXADDRLEN];
+	char sip[MAXSIPLEN];
 	unsigned count;
 };
 
@@ -73,7 +81,7 @@ struct carddav
 };
 
 
-static struct contact *in_contacts(struct contacts *contacts,
+static struct contact *in_contacts(struct carddav_context * context,
                                    const char *uri)
 {
 	struct pl pl;
@@ -85,16 +93,18 @@ static struct contact *in_contacts(struct contacts *contacts,
 	if (err)
 		return NULL;
 
-	char safe[128] = {0};
+	err = pl_strcpy(&addr.auri, context->sip, MAXSIPLEN);
+	if (err) {
+		warning("carddav: Failed to copy sip addr to string.\n");
+		return NULL;
+	}
 
-	str_ncpy(safe, addr.auri.p, addr.auri.l + 1);
-
-	return contact_find(contacts, safe);
+	return contact_find(context->contacts, context->sip);
 }
 
 
 static int process_name_param(const struct pl *name_param,
-			      struct pl *name, struct pl *params)
+                              struct pl *name, struct pl *params)
 {
 	if (!pl_isset(name_param))
 		return EINVAL;
@@ -110,19 +120,18 @@ static int process_name_param(const struct pl *name_param,
 
 
 static int add_addr(struct carddav_context *context,
-                    struct carddav *d,
-                    char addr[1024])
+                    struct carddav *d)
 
 {
-	if (in_contacts(context->contacts, addr)) {
-		info("carddav: Duplicate SIP %s\n", addr);
+	if (in_contacts(context, context->addr)) {
+		info("carddav: Duplicate SIP %s\n", context->addr);
 		return 0;
 	}
 
 	struct pl pl;
-	pl_set_str(&pl, addr);
+	pl_set_str(&pl, context->addr);
 
-	info("carddav: Adding %s\n", addr);
+	info("carddav: Adding %s\n", context->addr);
 	int e = contact_add(context->contacts, NULL, &pl);
 	if (!e) {
 		context->count++;
@@ -138,13 +147,12 @@ static int add_contract_tel(struct carddav_context *context,
                             struct pl *params,
                             struct pl *value)
 {
-	char addr[1024] = {0};
 	struct pl type = {0};
 
 	re_regex(params->p, params->l, "TYPE=[A-Za-z0-9., ]*", &type);
 
-	int len = re_snprintf(addr,
-	                      sizeof(addr),
+	int len = re_snprintf(context->addr,
+	                      MAXADDRLEN,
 	                      "\"%r%s%r%s "CARDDAV"\" <sip:",
 	                      &d->fullname,
 	                      (type.l)?" (Tel:":"",
@@ -153,7 +161,7 @@ static int add_contract_tel(struct carddav_context *context,
 
 	/* There is an extra @ > null and maybe a 0, so 4*/
 	if (len < 0 ||
-	    (len + strlen(context->gateway) + value->l + 4) >= sizeof(addr)) {
+	    (len + strlen(context->gateway) + value->l + 4) >= MAXADDRLEN) {
 		warning("carddav: Failed to start tel contact \"%r\"\n",
 		        &d->fullname);
 		return 0;
@@ -166,8 +174,8 @@ static int add_contract_tel(struct carddav_context *context,
 	 * SIP phone numbers are numeric only.
 	 */
 	if (*pos == '+') {
-		addr[len++]='0';
-		addr[len++]='0';
+		context->addr[len++]='0';
+		context->addr[len++]='0';
 		++pos;
 		while (*pos == '+')
 			++pos;
@@ -178,7 +186,7 @@ static int add_contract_tel(struct carddav_context *context,
 		char c = *pos++;
 
 		if (isdigit(c))
-			addr[len++]=c;
+			context->addr[len++]=c;
 		else if (isalpha(c)) {
 			warning("carddav: Invalid tel contact \"%r\"\n",
 			        &d->fullname);
@@ -186,16 +194,16 @@ static int add_contract_tel(struct carddav_context *context,
 		}
 	}
 
-	int e = re_snprintf(addr+len, sizeof(addr) - len,
+	int e = re_snprintf(context->addr+len, MAXADDRLEN - len,
 	            "@%s>", context->gateway);
 
-	if (e < 0 || addr[len+e-1] != '>') {
+	if (e < 0 || context->addr[len+e-1] != '>') {
 		warning("carddav: Failed to complete tel contact \"%r\"\n",
 		        &d->fullname);
 		return 0;
 	}
 
-	return add_addr(context, d, addr);
+	return add_addr(context, d);
 }
 
 
@@ -204,7 +212,6 @@ static int add_impp_contact(struct carddav_context *context,
                             struct pl *params,
                             struct pl *value)
 {
-	char addr[1024] = {0};
 	struct pl type = {0};
 
 	re_regex(params->p, params->l, "TYPE=[A-Za-z0-9., ]*", &type);
@@ -215,7 +222,7 @@ static int add_impp_contact(struct carddav_context *context,
 		return 0;
 	}
 
-	int len = re_snprintf(addr, sizeof(addr),
+	int len = re_snprintf(context->addr, MAXADDRLEN,
 	                      "\"%r "CARDDAV"\" <sip:%r>",
 	                      &d->fullname,
 	                      value);
@@ -226,7 +233,7 @@ static int add_impp_contact(struct carddav_context *context,
 		return 0;
 	}
 
-	return add_addr(context, d, addr);
+	return add_addr(context, d);
 }
 
 
@@ -466,15 +473,6 @@ static int carddav_sync_instance(struct carddav_context *context)
 }
 
 
-static void extract_name(char name[64], const char *con_str)
-{
-	const char * pos = con_str + 1;
-	const char * end = strchr(pos, '"');
-	unsigned len = PTRDIFF(end, pos) + 1;
-	str_ncpy(name, pos, len);
-}
-
-
 static void restore_unique(struct carddav_context *context,
                            struct list *contacts_org)
 {
@@ -498,7 +496,7 @@ static void restore_unique(struct carddav_context *context,
 		if (strstr(con_str, CARDDAV))
 			continue;
 
-		if (in_contacts(context->contacts, uri)) {
+		if (in_contacts(context, uri)) {
 			debug("carddav: Found \"%s\", not adding.\n",
 			      uri);
 			continue;
@@ -532,25 +530,18 @@ static void restore_unique(struct carddav_context *context,
 			++pos;
 		}
 
-		char name[64] = {0};
-		extract_name(name, con_str);
-		mbuf_set_pos(context->buf_a, 0);
-
 		if (pos == end) {
-			unsigned len = PTRDIFF(end, uri) - 3;
-			char newaddr[128];
-			char pn[16] = {0};
+			unsigned len = PTRDIFF(end, uri) - 4;
+			struct pl pn = {.p = uri + 4, .l = len};
 
-			str_ncpy(pn, uri+4, len);
+			re_snprintf(context->sip, MAXSIPLEN,
+			            "sip:%r@%s",
+			            &pn, context->gateway);
 
-			re_snprintf(newaddr, sizeof(newaddr),
-			            "sip:%s@%s",
-			            pn, context->gateway);
-
-			dup = contact_find(contacts, newaddr);
+			dup = contact_find(contacts, context->sip);
 			if (dup) {
-				debug("carddav: Phone number %s"
-				      " already on gateway.\n", pn);
+				debug("carddav: Phone number %r"
+				      " already on gateway.\n", &pn);
 				continue;
 			}
 		}
@@ -568,62 +559,69 @@ static void restore_unique(struct carddav_context *context,
 
 static int carddav_sync(void)
 {
-	char user[256] = {0};
-	char url[1024] = {0};
-	char gateway[512] = {0};
+	struct carddav_context * context = mem_alloc(
+	     sizeof(struct carddav_context), NULL);
 
-	struct carddav_context context = {0};
+	if (!context) {
+		warning("carddav: Context allocation failed.\n");
+		return ENOMEM;
+	}
+
 
 	if (conf_get_str(conf_cur(), "carddav_gateway",
-	                 gateway, sizeof(gateway)) ||
+	                 context->gateway, MAXGATEWAYLEN) ||
 	    conf_get_str(conf_cur(), "carddav_user",
-	                 user, sizeof(user)) ||
+	                 context->user, MAXUSERLEN) ||
 	    conf_get_str(conf_cur(), "carddav_url",
-	                 url, sizeof(url))) {
-		warning("carddav: Miss⅞ing config.\n");
+	                 context->url, MAXURLLEN)) {
+		warning("carddav: Missing config.\n");
+		mem_deref(context);
 		return EINVAL;
 	}
 
-	conf_get_u32(conf_cur(), "carddav_buf", &context.buf_len);
-	if (!context.buf_len)
-		context.buf_len = 1024 * 128;
+	conf_get_u32(conf_cur(), "carddav_buf", &context->buf_len);
+	if (!context->buf_len)
+		context->buf_len = 1024 * 128;
 
-	info("carddav: using buffer of: %u\n", context.buf_len);
-	context.contacts = baresip_contacts();
-	context.gateway = gateway;
-	context.url = url;
-	context.user = user;
+	info("carddav: using buffer of: %u\n", context->buf_len);
+	context->contacts = baresip_contacts();
 
 	CURLcode result = curl_global_init(CURL_GLOBAL_ALL);
-	if (result != CURLE_OK)
+	if (result != CURLE_OK) {
+		warning("carddav: Curl init failed.\n");
+		mem_deref(context);
 		return (int)result;
+	}
 
 	int e = 0;
 
-	context.buf_a = mbuf_alloc(context.buf_len);
-	if (!context.buf_a) {
+	context->buf_a = mbuf_alloc(context->buf_len);
+	if (!context->buf_a) {
 		warning("carddav: Unable to allocate carddav buffer A.\n");
 		e = ENOMEM;
 		goto cleanup;
 	}
-	context.buf_b = mbuf_alloc(context.buf_len);
-	if (!context.buf_b) {
+	context->buf_b = mbuf_alloc(context->buf_len);
+	if (!context->buf_b) {
 		warning("carddav: Unable to allocate carddav buffer B.\n");
-		mem_deref(context.buf_a);
+		mem_deref(context->buf_a);
 		e = ENOMEM;
 		goto cleanup;
 	}
 
-	struct list *contacts_list = contact_list(context.contacts);
+	struct list *contacts_list = contact_list(context->contacts);
 	struct list contacts_list_org;
 	list_init(&contacts_list_org);
 	move_contacts(contacts_list,
 	              &contacts_list_org,
-	              context.contacts);
+	              context->contacts);
 
-	e = carddav_sync_instance(&context);
-	if (e)
-		goto bad;
+	e = carddav_sync_instance(context);
+	if (e) {
+		/* Wipe any contacts added. */
+		move_contacts(contacts_list, NULL, context->contacts);
+		goto cleanup_contacts;
+	}
 
 	uint32_t extras = 0;
 
@@ -632,7 +630,7 @@ static int carddav_sync(void)
 
 	for (uint32_t n = 1; n <= extras; n++) {
 		char entry[256];
-		context.count = 0;
+		context->count = 0;
 
 		debug("carddav: Loading extra %"PRIu32"\n", n);
 
@@ -640,7 +638,7 @@ static int carddav_sync(void)
 		            "carddav_%"PRIu32"_url", n);
 
 		if (conf_get_str(conf_cur(), entry,
-	                         url, sizeof(url))) {
+	                         context->url, MAXURLLEN)) {
 			warning("carddav: Failed to get %s\n", entry);
 			continue;
 		}
@@ -649,33 +647,31 @@ static int carddav_sync(void)
 		            "carddav_%"PRIu32"_user", n);
 
 		if (conf_get_str(conf_cur(), entry,
-	                         user, sizeof(user))) {
+	                         context->user, MAXUSERLEN)) {
 			warning("carddav: Failed to get %s\n", entry);
 			continue;
 		}
 
-		carddav_sync_instance(&context);
+		carddav_sync_instance(context);
 	}
 	/* Restore main carddav for any uploads. */
-	conf_get_str(conf_cur(), "carddav_user", user, sizeof(user));
-	conf_get_str(conf_cur(), "carddav_url", url, sizeof(url));
+	conf_get_str(conf_cur(), "carddav_user", context->user, MAXUSERLEN);
+	conf_get_str(conf_cur(), "carddav_url", context->url, MAXURLLEN);
 
-	goto cleanup;
-bad:
-	/* Wipe any contacts added. */
-	move_contacts(contacts_list, NULL, context.contacts);
-
-cleanup:
+cleanup_contacts:
 	/* Restore any unique original contacts. (all on error)*/
-	restore_unique(&context, &contacts_list_org);
+	restore_unique(context, &contacts_list_org);
 	list_flush(&contacts_list_org);
 
+cleanup:
 	curl_global_cleanup();
 
-	if (context.buf_a)
-		mem_deref(context.buf_a);
-	if (context.buf_b)
-		mem_deref(context.buf_b);
+	if (context->buf_a)
+		mem_deref(context->buf_a);
+	if (context->buf_b)
+		mem_deref(context->buf_b);
+
+	mem_deref(context);
 
 	return e;
 }
