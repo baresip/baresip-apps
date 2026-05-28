@@ -628,8 +628,13 @@ static int carddav_sync(void)
 	if (!conf_get_u32(conf_cur(), "carddav_extras", &extras))
 		info("carddav: Loading %"PRIu32" extra CardDAVs.\n", extras);
 
+	if (extras > 99) {
+		warning("carddav: Only 99 extra carddav are support.\n");
+		extras = 99;
+	}
+
 	for (uint32_t n = 1; n <= extras; n++) {
-		char entry[256];
+		char entry[16]; /* carddav_99_user plus termination.*/
 		context->count = 0;
 
 		debug("carddav: Loading extra %"PRIu32"\n", n);
