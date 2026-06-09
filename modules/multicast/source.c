@@ -256,6 +256,7 @@ static void src_mic_read_handler(struct auframe *af, void *arg)
 	}
 
 	err = aubuf_write_auframe(src->aubuf, af);
+	mtx_unlock(&src->lock);
 	if (err)
 		warning ("mcsource: mic aubuf_write (%m)\n", err);
 
@@ -333,6 +334,7 @@ static void src_gong_read_handler(struct auframe *af, void *arg)
 	}
 
 	err = aubuf_write_auframe(src->aubuf, af);
+	mtx_unlock(&src->lock);
 	if (err)
 		warning ("mcsource: gong aubuf_write (%m)\n", err);
 
