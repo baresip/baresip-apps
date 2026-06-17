@@ -5,6 +5,18 @@ All notable changes to baresip-apps will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v4.9.0 - 2026-06-17
+
+### What's Changed
+* Add video to rtsp. by @jabjoe in https://github.com/baresip/baresip-apps/pull/94
+* Multicast sender gong by @cHuberCoffee in https://github.com/baresip/baresip-apps/pull/101
+* calltimer: added established call timeout module by @SnowMaster12 in https://github.com/baresip/baresip-apps/pull/103
+
+### New Contributors
+* @SnowMaster12 made their first contribution in https://github.com/baresip/baresip-apps/pull/103
+
+**Full Changelog**: https://github.com/baresip/baresip-apps/compare/v4.7.0...v4.9.0
+
 ## v4.7.0 - 2026-04-07
 
 ## v4.6.0 - 2026-03-04
