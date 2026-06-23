@@ -1,12 +1,13 @@
 #
 # CMakeLists.txt
 #
-# Copyright (C) 2010 - 2022 Alfred E. Heggestad
-# Copyright (C) 2022 Sebastian Reimers
-# Copyright (C) 2023 Christian Spielberger
+# Copyright (C) 2010 - 2026 Alfred E. Heggestad
+# Copyright (C) 2022 - 2026 Sebastian Reimers
+# Copyright (C) 2023 - 2026 Christian Spielberger
 #
 
-cmake_minimum_required(VERSION 3.15..3.31)
+cmake_minimum_required(VERSION 3.18...4.0)
+
 
 project(baresip-apps VERSION 4.9.0)
 
