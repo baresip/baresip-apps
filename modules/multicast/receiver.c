@@ -891,6 +891,12 @@ int mcreceiver_alloc(struct sa *addr, uint8_t prio)
 	if (err)
 		goto out;
 
+	char id[32];
+	re_snprintf(id, sizeof(id), "mcreceiver-%d", prio);
+	err = jbuf_set_id(mcreceiver->jbuf, id);
+	if (err)
+		goto out;
+
 	err = rtp_listen_single(&mcreceiver->rtp,
 				&mcreceiver->addr, port, rtp_receive,
 				mcreceiver);
