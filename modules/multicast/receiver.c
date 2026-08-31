@@ -445,15 +445,16 @@ static void decode_frames(struct mcreceiver *rx)
 
 	do {
 		err = jbuf_get(rx->jbuf, &hdr, &mb);
-		if (err && err != EAGAIN) {
+		if (err == EAGAIN)
+			++n;
+		else if (err)
 			break;
-		}
 
-		err = mcplayer_decode(&hdr, mb, err == EAGAIN);
+		err = mcplayer_decode(&hdr, mb);
 		mb = mem_deref(mb);
 		if (err)
 			break;
-	} while (n--);
+	} while (--n);
 
 	int32_t delay;
 	delay = jbuf_next_play(rx->jbuf);

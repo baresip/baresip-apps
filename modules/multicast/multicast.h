@@ -56,7 +56,7 @@ void mcplayer_stop(void);
 void mcplayer_fadeout(void);
 void mcplayer_fadein(bool restart);
 bool mcplayer_fadeout_done(void);
-int mcplayer_decode(const struct rtp_header *hdr, struct mbuf *mb, bool drop);
+int mcplayer_decode(const struct rtp_header *hdr, struct mbuf *mb);
 
 int  mcplayer_init(void);
 void mcplayer_terminate(void);
