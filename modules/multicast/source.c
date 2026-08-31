@@ -305,7 +305,6 @@ static void src_gong_err_handler(int err, const char *str, void *arg)
 			return;
 		}
 
-		aubuf_set_mode(src->aubuf, AUBUF_FIXED);
 		aubuf_set_live(src->aubuf, true);
 
 		re_atomic_rlx_set(&src->mic_muted, false);
@@ -517,7 +516,6 @@ static int setup_buffers(struct mcsource *src)
 		goto out;
 	}
 
-	aubuf_set_mode(src->aubuf, AUBUF_FIXED);
 	if (src->src_gong)
 		aubuf_set_live(src->aubuf, false);
 

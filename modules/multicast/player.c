@@ -148,7 +148,7 @@ static void fade_process(struct auframe *af)
  *
  * @return 0 if success, otherwise errorcode
  */
-int mcplayer_decode(const struct rtp_header *hdr, struct mbuf *mb, bool drop)
+int mcplayer_decode(const struct rtp_header *hdr, struct mbuf *mb)
 {
 	struct auframe af;
 	struct le *le;
@@ -208,6 +208,7 @@ int mcplayer_decode(const struct rtp_header *hdr, struct mbuf *mb, bool drop)
 		warning("multicast player: invalid sample formats (%s -> %s)."
 			" %s\n",
 			aufmt_name(af.fmt), aufmt_name(player->play_fmt),
+
 			player->play_fmt == AUFMT_S16LE ?
 			"Use module auconv!" : "");
 	}
@@ -218,11 +219,6 @@ int mcplayer_decode(const struct rtp_header *hdr, struct mbuf *mb, bool drop)
 			"player %u/%u. Use module auresamp!\n",
 			af.srate, af.ch,
 			player->auplay_prm.srate, player->auplay_prm.ch);
-	}
-
-	if (drop) {
-		aubuf_drop_auframe(player->aubuf, &af);
-		goto out;
 	}
 
 	fade_process(&af);
@@ -398,10 +394,6 @@ int mcplayer_start(const struct aucodec *ac)
 				err);
 			goto out;
 		}
-
-		aubuf_set_mode(player->aubuf, cfg->adaptive ?
-			       AUBUF_ADAPTIVE : AUBUF_FIXED);
-		aubuf_set_silence(player->aubuf, cfg->silence);
 	}
 
 	err = aufilt_setup(baresip_aufiltl());
