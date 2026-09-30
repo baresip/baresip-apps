@@ -5,6 +5,17 @@ All notable changes to baresip-apps will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v4.12.0 - 2026-09-30
+
+### What's Changed
+* cmake: inc cmake version and copyright year by @cspiel1 in https://github.com/baresip/baresip-apps/pull/106
+* mc: fix build - drop aubuf adaptive mode by @cspiel1 in https://github.com/baresip/baresip-apps/pull/108
+* jbuf: safer jbuf_set_id by @cspiel1 in https://github.com/baresip/baresip-apps/pull/107
+
+
+**Full Changelog**: https://github.com/baresip/baresip-apps/compare/v4.9.0...v4.12.0
+
+
 ## v4.9.0 - 2026-06-17
 
 ### What's Changed
