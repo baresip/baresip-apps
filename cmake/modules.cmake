@@ -20,6 +20,7 @@ set(MODULES
   rtsp
   ebuacip
   calltimer
+  carddav
 )
 
 if(FVAD_FOUND)

@@ -44,7 +44,9 @@ jobs:
                             libsndfile1-dev \
                             libssl-dev \
                             libglib2.0-dev \
-                            libgstreamer1.0-dev
+                            libgstreamer1.0-dev \
+                            pkg-config \
+                            libcurl4-openssl-dev
 
     - name: install aac
       if: ${{ matrix.os == 'ubuntu-22.04' }}
@@ -67,7 +69,8 @@ jobs:
                         mpg123 \
                         glib-utils \
                         pkg-config \
-                        gst-plugins-base
+                        gst-plugins-base \
+                        curl
 
     - uses: sreimers/pr-dependency-action@v1
       with:
